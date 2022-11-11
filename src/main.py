@@ -1,14 +1,15 @@
-from ssl_datasets.generative_dataset import PretextTaskGenerativeDatamodule
-from ssl_models.model import *
+from self_supervised.datasets import PretextTaskGenerativeDatamodule
+from self_supervised.model import SSLM, MetricTracker
 from support.visualization import plot_history
 
-def run_pipeline(dataset_dir, results_dir, subject, task='binary'):
+
+def run_pipeline(dataset_dir, results_dir, subject, classification_task='binary'):
     print('#################')
     print('>>> running pipeline ('+subject.upper()+')')
-    print('task:', task)
+    print('task:', classification_task)
     
     result_path = results_dir+subject+'/'
-    checkpoint_name = subject+'_'+task+'_model_weights.ckpt'
+    checkpoint_name = subject+'_'+classification_task+'_model_weights.ckpt'
     
     imsize=(256,256)
     batch_size = 64
@@ -25,12 +26,12 @@ def run_pipeline(dataset_dir, results_dir, subject, task='binary'):
         batch_size=batch_size,
         train_val_split=train_val_split,
         seed=seed,
-        n_repeat=4,
-        pretextask=task)
+        n_repeat=12,
+        classification_task=classification_task)
     datamodule.prepare_data()
     
     print('>>> setting up the model')
-    pretext_model = SSLM(task, lr=lr, seed=seed)
+    pretext_model = SSLM(classification_task, lr=lr, seed=seed)
     cb = MetricTracker()
     trainer = pl.Trainer(
         callbacks= [cb],
@@ -49,16 +50,17 @@ def run_pipeline(dataset_dir, results_dir, subject, task='binary'):
     trainer.test(pretext_model, dataloaders=datamodule.test_dataloader())
     
     print('>>> training plot')
-    plot_history(cb.log_metrics, epochs, result_path, task)
+    plot_history(cb.log_metrics, epochs, result_path, classification_task)
     
 
 if __name__ == "__main__":
     dataset_dir = '/home/ubuntu/TesiAnomalyDetection/dataset/'
     results_dir = '/home/ubuntu/TesiAnomalyDetection/outputs/computations/'
-    #subjects = ['bottle', 'grid', 'screw', 'tile', 'toothbrush']
-    subjects = ['bottle']
+    subjects = ['bottle', 'grid', 'screw', 'tile', 'toothbrush']
+    #subjects = ['bottle']
     for subject in subjects:
         run_pipeline(dataset_dir, results_dir, subject, '3-way')
-    
-    for subject in subjects:
         run_pipeline(dataset_dir, results_dir, subject, 'binary')
+        
+        
+        
