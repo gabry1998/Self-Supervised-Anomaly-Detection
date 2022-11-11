@@ -90,7 +90,7 @@ class PretextTaskGenerativeDataset(Dataset):
                 x = paste_patch(x, patch, coords, patch)
                 return x
 
-class PretextTaskDatamodule(pl.LightningDataModule):
+class PretextTaskGenerativeDatamodule(pl.LightningDataModule):
     def __init__(
         self, 
         root_dir:str, #qualcosa come ../dataset/bottle/

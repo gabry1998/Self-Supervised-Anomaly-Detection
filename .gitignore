@@ -9,6 +9,7 @@ __pycache__/
 #project folders
 mvtec/
 dataset/
+lightning_logs/
 
 
 # Distribution / packaging
