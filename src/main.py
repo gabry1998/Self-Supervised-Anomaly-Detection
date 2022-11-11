@@ -11,11 +11,11 @@ def run_pipeline(dataset_dir, results_dir, subject, task='binary'):
     checkpoint_name = subject+'_'+task+'_model_weights.ckpt'
     
     imsize=(256,256)
-    batch_size = 32
+    batch_size = 64
     train_val_split = 0.2
     seed = 0
-    lr = 0.003
-    epochs = 30
+    lr = 0.001
+    epochs = 60
     
     
     print('>>> preparing datamodule')
@@ -25,12 +25,12 @@ def run_pipeline(dataset_dir, results_dir, subject, task='binary'):
         batch_size=batch_size,
         train_val_split=train_val_split,
         seed=seed,
-        n_repeat=1,
+        n_repeat=4,
         pretextask=task)
     datamodule.prepare_data()
     
     print('>>> setting up the model')
-    task = SSLM(task, lr=lr, seed=seed)
+    pretext_model = SSLM(task, lr=lr, seed=seed)
     cb = MetricTracker()
     trainer = pl.Trainer(
         callbacks= [cb],
@@ -40,13 +40,13 @@ def run_pipeline(dataset_dir, results_dir, subject, task='binary'):
         check_val_every_n_epoch=1,
         reload_dataloaders_every_n_epochs=10)
 
-    trainer.fit(task, datamodule=datamodule)
+    trainer.fit(pretext_model, datamodule=datamodule)
     trainer.save_checkpoint(result_path+checkpoint_name)
     
     print('>>> testing')
-    task = SSLM.load_from_checkpoint(result_path+checkpoint_name, model=task.model)
+    pretext_model = SSLM.load_from_checkpoint(result_path+checkpoint_name, model=pretext_model.model)
     datamodule.setup('test')
-    trainer.test(task, dataloaders=datamodule.test_dataloader())
+    trainer.test(pretext_model, dataloaders=datamodule.test_dataloader())
     
     print('>>> training plot')
     plot_history(cb.log_metrics, epochs, result_path, task)

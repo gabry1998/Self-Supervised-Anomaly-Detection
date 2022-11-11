@@ -161,16 +161,21 @@ class PretextTaskGenerativeDatamodule(pl.LightningDataModule):
         return DataLoader(
             self.train_dataset, 
             batch_size=self.batch_size, 
-            shuffle=False)
+            shuffle=False,
+            drop_last=True,
+            num_workers=8)
 
     def val_dataloader(self):
         return DataLoader(
             self.val_dataset, 
             batch_size=self.batch_size, 
-            shuffle=False)
+            shuffle=False,
+            drop_last=True,
+            num_workers=8)
     
     def test_dataloader(self):
         return DataLoader(
             self.test_dataset, 
             batch_size=self.batch_size, 
-            shuffle=False)
+            shuffle=False,
+            num_workers=8)
