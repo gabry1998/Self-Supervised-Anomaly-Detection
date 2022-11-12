@@ -4,23 +4,89 @@ from PIL import Image
 from sklearn.model_selection import train_test_split as tts
 from torch.utils.data import DataLoader, Dataset
 
-from support.cutpaste_parameters import *
-from support.dataset_generator import *
-from support.filereader import get_image_filenames
+from .support.dataset_generator import *
+from .support.cutpaste_parameters import *
+from .support.functional import *
 
+
+class MVTecDataset(Dataset):
+    def __init__(
+            self,
+            dataset_dir,
+            subject,
+            images_filenames,
+            imsize=(256,256),
+            transform=None) -> None:
+        super().__init__()
+        self.dataset_dir = dataset_dir,
+        self.subject = subject
+        self.images_filenames = images_filenames
+        self.imsize = imsize
+        self.transform = transform
+    
+    def __getitem__(self, index):
+        filename = self.images_filenames[index]
+        test_image = Image.open(filename).resize(self.imsize).convert('RGB')
+        
+        gt_filename = get_mvtec_gt_filename_counterpart(
+            filename,
+            self.dataset_dir+self.subject+'/ground_truth/')
+        
+        gt = ground_truth(gt_filename, self.imsize)
+        
+        if self.transform:
+            test_image = self.transform(test_image)
+            
+        return test_image, gt
+    
+    def __len__(self):
+        return self.images_filenames.shape[0]
+
+
+class MVTecDatamodule(pl.LightningDataModule):
+    def __init__(
+            self,
+            root_dir, #qualcosa come ../dataset/bottle/
+            subject,
+            imsize,
+            batch_size:int=64,  
+            seed=0):
+            
+        super().__init__()
+        self.root_dir = root_dir
+        self.subject = subject
+        self.imsize = imsize
+        self.batch_size = batch_size
+        self.seed = seed
+        
+        self.test_images_filenames = get_mvtec_test_images(self.root_dir+'/test/')
+    
+    def setup(self, stage=None) -> None:
+        self.test_dataset = MVTecDataset(
+            self.test_images_filenames,
+        )
+    
+    def test_dataloader(self):
+        return super().test_dataloader()
+        
 
 class GenerativeDataset(Dataset):
     def __init__(
-        self, 
-        task,
-        images_filenames,
-        imsize=(256,256),
-        transform=None) -> None:
+            self, 
+            task,
+            images_filenames,
+            imsize=(256,256),
+            transform=None) -> None:
 
         super().__init__()
         self.images_filenames = images_filenames
 
         self.augmentation_dict = augmentation_dict
+        self.area_ratio = augmentation_dict['patch']['area_ratio']
+        self.aspect_ratio = augmentation_dict['patch']['aspect_ratio']
+        self.scar_width = augmentation_dict['scar']['width']
+        self.scar_thiccness = augmentation_dict['scar']['thiccness']
+        
         self.imsize = imsize
         self.task=task
         self.transform = transform
@@ -58,16 +124,12 @@ class GenerativeDataset(Dataset):
         if y == 0:
             return x
         if y == 1:
-            area_ratio = augmentation_dict['patch']['area_ratio']
-            aspect_ratio = augmentation_dict['patch']['aspect_ratio']
-            patch, coords = generate_patch(x, area_ratio, aspect_ratio)
+            patch, coords = generate_patch(x, self.area_ratio, self.aspect_ratio)
             patch = apply_jittering(patch, augs)
             x = paste_patch(x, patch, coords)
             return x
         if y == 2:
-            scar_width = augmentation_dict['scar']['width']
-            scar_thiccness = augmentation_dict['scar']['thiccness']
-            patch, coords = generate_scar(x.size, scar_width, scar_thiccness)
+            patch, coords = generate_scar(x.size, self.scar_width, self.scar_thiccness)
             x = paste_patch(x, patch, coords, patch)
             return x
 
@@ -78,18 +140,15 @@ class GenerativeDataset(Dataset):
             return x
         else:
             if random.randint(0,1) == 1:
-                area_ratio = augmentation_dict['patch']['area_ratio']
-                aspect_ratio = augmentation_dict['patch']['aspect_ratio']
-                patch, coords = generate_patch(x, area_ratio, aspect_ratio)
+                patch, coords = generate_patch(x, self.area_ratio, self.aspect_ratio)
                 patch = apply_jittering(patch, augs)
                 x = paste_patch(x, patch, coords)
                 return x
             else:
-                scar_width = augmentation_dict['scar']['width']
-                scar_thiccness = augmentation_dict['scar']['thiccness']
-                patch, coords = generate_scar(x.size, scar_width, scar_thiccness)
+                patch, coords = generate_scar(x.size, self.scar_width, self.scar_thiccness)
                 x = paste_patch(x, patch, coords, patch)
                 return x
+
 
 class GenerativeDatamodule(pl.LightningDataModule):
     def __init__(
@@ -98,40 +157,61 @@ class GenerativeDatamodule(pl.LightningDataModule):
             imsize=(256,256),
             batch_size:int=64,  
             train_val_split:float=0.2,
+            classification_task='binary',
             seed:int=0,
-            n_repeat=1,
-            classification_task='binary'):
+            min_dataset_length=2000,
+            duplication=False,):
         
         super().__init__()
         self.save_hyperparameters()
         self.root_dir_train = root_dir+'/train/good/'
         self.root_dir_test = root_dir+'/test/good/'
         self.imsize = imsize
-        self.n_repeat = n_repeat
         self.batch_size = batch_size
         self.train_val_split = train_val_split
-        self.seed = seed
         self.classification_task = classification_task
+        
+        self.seed = seed
+        self.min_dataset_length = min_dataset_length
+        self.duplication = duplication
 
         self.transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
         ])
+        
+        self.prepare_filenames()
 
+    def prepare_filenames(self):
+        images_filenames = get_image_filenames(self.root_dir_train)
+
+        train_images_filenames, val_images_filenames = tts(
+            images_filenames, 
+            test_size=self.train_val_split, 
+            random_state=self.seed)
+        test_images_filenames = get_image_filenames(self.root_dir_test)
+        
+        if self.duplication:
+            self.train_images_filenames = duplicate_filenames(
+                train_images_filenames,
+                self.min_dataset_length)
+            self.val_images_filenames = duplicate_filenames(
+                val_images_filenames,
+                self.min_dataset_length)
+            
+            self.test_images_filenames = duplicate_filenames(
+                    test_images_filenames,
+                    self.min_dataset_length)
+        else:
+            self.train_images_filenames = train_images_filenames
+            self.val_images_filenames = val_images_filenames
+            self.test_images_filenames = test_images_filenames
+    
     def prepare_data(self) -> None:
         pass
     
     def setup(self, stage:str=None) -> None:
         if stage == 'fit' or stage is None:
-            images_filenames = get_image_filenames(
-            self.root_dir_train, 
-            n_repeat=self.n_repeat)
-
-            self.train_images_filenames, self.val_images_filenames = tts(
-                images_filenames, 
-                test_size=self.train_val_split, 
-                random_state=self.seed)
-            
             self.val_dataset = GenerativeDataset(
                 self.classification_task,
                 self.val_images_filenames,
@@ -139,10 +219,6 @@ class GenerativeDatamodule(pl.LightningDataModule):
                 transform=self.transform)
             
         if stage == 'test' or stage is None:
-            self.test_images_filenames = get_image_filenames(
-                self.root_dir_test, 
-                n_repeat=self.n_repeat)
-            
             self.test_dataset = GenerativeDataset(
                 self.classification_task,
                 self.test_images_filenames,

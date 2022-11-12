@@ -1,6 +1,7 @@
-from self_supervised.datasets import PretextTaskGenerativeDatamodule
+from self_supervised.datasets import GenerativeDatamodule
 from self_supervised.model import SSLM, MetricTracker
-from support.visualization import plot_history
+from self_supervised.support.visualization import plot_history
+import pytorch_lightning as pl
 
 
 def run_pipeline(dataset_dir, results_dir, subject, classification_task='binary'):
@@ -12,7 +13,7 @@ def run_pipeline(dataset_dir, results_dir, subject, classification_task='binary'
     checkpoint_name = subject+'_'+classification_task+'_model_weights.ckpt'
     
     imsize=(256,256)
-    batch_size = 64
+    batch_size = 32
     train_val_split = 0.2
     seed = 0
     lr = 0.001
@@ -20,15 +21,14 @@ def run_pipeline(dataset_dir, results_dir, subject, classification_task='binary'
     
     
     print('>>> preparing datamodule')
-    datamodule = PretextTaskGenerativeDatamodule(
+    datamodule = GenerativeDatamodule(
         dataset_dir+subject+'/',
         imsize=imsize,
         batch_size=batch_size,
         train_val_split=train_val_split,
         seed=seed,
-        n_repeat=12,
         classification_task=classification_task)
-    datamodule.prepare_data()
+    datamodule.setup('fit')
     
     print('>>> setting up the model')
     pretext_model = SSLM(classification_task, lr=lr, seed=seed)
@@ -39,7 +39,7 @@ def run_pipeline(dataset_dir, results_dir, subject, classification_task='binary'
         devices=1, 
         max_epochs=epochs, 
         check_val_every_n_epoch=1,
-        reload_dataloaders_every_n_epochs=10)
+        reload_dataloaders_every_n_epochs=20)
 
     trainer.fit(pretext_model, datamodule=datamodule)
     trainer.save_checkpoint(result_path+checkpoint_name)
@@ -56,8 +56,8 @@ def run_pipeline(dataset_dir, results_dir, subject, classification_task='binary'
 if __name__ == "__main__":
     dataset_dir = '/home/ubuntu/TesiAnomalyDetection/dataset/'
     results_dir = '/home/ubuntu/TesiAnomalyDetection/outputs/computations/'
-    subjects = ['bottle', 'grid', 'screw', 'tile', 'toothbrush']
-    #subjects = ['bottle']
+    #subjects = ['bottle', 'grid', 'screw', 'tile', 'toothbrush']
+    subjects = ['bottle']
     for subject in subjects:
         run_pipeline(dataset_dir, results_dir, subject, '3-way')
         run_pipeline(dataset_dir, results_dir, subject, 'binary')
