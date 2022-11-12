@@ -7,6 +7,7 @@ from torchvision import transforms
 from .support.dataset_generator import *
 from .support.cutpaste_parameters import CPP
 from .support.functional import *
+from numpy.random import permutation
 
 
 class MVTecDataset(Dataset):
@@ -305,9 +306,9 @@ class CutPasteClassicDatamodule(pl.LightningDataModule):
         self.min_dataset_length = min_dataset_length
         self.duplication = duplication
         
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.random.manual_seed(seed)
+        #random.seed(seed)
+        #np.random.seed(seed)
+        #torch.random.manual_seed(seed)
 
         self.transform = transforms.Compose([
             transforms.ToPILImage(),
@@ -331,10 +332,12 @@ class CutPasteClassicDatamodule(pl.LightningDataModule):
                 training_data, 
                 training_labels
             )
+            
             training_data, training_labels = np2tensor(
                 training_data, 
                 training_labels
             )
+            
             training_data, val_data, training_labels, val_labels = tts(
                 training_data, 
                 training_labels, 
@@ -367,6 +370,7 @@ class CutPasteClassicDatamodule(pl.LightningDataModule):
                 test_data,
                 test_labels
             )
+            
             test_data, test_labels = np2tensor(
                 test_data,
                 test_labels

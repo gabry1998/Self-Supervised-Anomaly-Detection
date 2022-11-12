@@ -90,8 +90,8 @@ def run_pipeline(
 if __name__ == "__main__":
     dataset_dir = '/home/ubuntu/TesiAnomalyDetection/dataset/'
     results_dir = '/home/ubuntu/TesiAnomalyDetection/outputs/computations/'
-    #subjects = ['bottle', 'grid', 'screw', 'tile', 'toothbrush']
-    subjects = ['bottle', 'grid']
+    subjects = ['screw', 'tile', 'toothbrush']
+    #subjects = ['bottle', 'grid']
     for subject in subjects:
         run_pipeline(dataset_dir, results_dir, subject, '3-way', 'classic_dataset')
         run_pipeline(dataset_dir, results_dir, subject, '3-way', 'generative_dataset')

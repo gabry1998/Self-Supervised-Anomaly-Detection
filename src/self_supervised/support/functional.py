@@ -47,12 +47,12 @@ def duplicate_filenames(filenames, baseline=2000):
     return dummy_copy
 
 def list2np(images, labels):
-    x = np.array([np.array(a, dtype=np.uint8) for a in images])
+    x = np.array([np.array(a, dtype=np.float32) for a in images])
     y = np.array(labels, dtype=int)
     return x,y
 
 
 def np2tensor(images, labels):
-    images = torch.as_tensor(images, dtype=torch.float16)
+    images = torch.as_tensor(images, dtype=torch.float32)
     labels = torch.as_tensor(labels, dtype=int)
     return images,labels
