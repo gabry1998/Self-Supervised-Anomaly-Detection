@@ -10,7 +10,6 @@ __pycache__/
 mvtec/
 dataset/
 lightning_logs/
-outputs/
 test.py
 
 

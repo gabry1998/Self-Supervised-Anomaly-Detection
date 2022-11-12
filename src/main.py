@@ -1,16 +1,29 @@
-from self_supervised.datasets import GenerativeDatamodule
+from self_supervised.datasets import *
 from self_supervised.model import SSLM, MetricTracker
 from self_supervised.support.visualization import plot_history
 import pytorch_lightning as pl
+from self_supervised.support.cutpaste_parameters import CPP
 
 
-def run_pipeline(dataset_dir, results_dir, subject, classification_task='binary'):
+def run_pipeline(
+        dataset_dir, 
+        results_dir, 
+        subject, 
+        classification_task='binary', 
+        dataset_type_generation='classic_dataset'):
+    
     print('#################')
     print('>>> running pipeline ('+subject.upper()+')')
-    print('task:', classification_task)
+    print('classification task:', classification_task)
+    print('dataset type generation:', dataset_type_generation)
+    print('cutpaste parameters:')
+    print(CPP.summary)
     
-    result_path = results_dir+subject+'/'
-    checkpoint_name = subject+'_'+classification_task+'_model_weights.ckpt'
+    result_path = results_dir+subject+'/'+dataset_type_generation+'/'+classification_task+'/'
+    checkpoint_name = subject+'.ckpt'
+    
+    print('result dir:', result_path)
+    print('checkpoint name:', checkpoint_name)
     
     imsize=(256,256)
     batch_size = 32
@@ -19,15 +32,34 @@ def run_pipeline(dataset_dir, results_dir, subject, classification_task='binary'
     lr = 0.001
     epochs = 60
     
+    print('image size:', imsize)
+    print('batch size:', batch_size)
+    print('split rate:', train_val_split)
+    print('seed:', seed)
+    print('optimizer:', 'SGD')
+    print('learning rate:', lr)
+    print('epochs:', epochs)
+    
     
     print('>>> preparing datamodule')
-    datamodule = GenerativeDatamodule(
-        dataset_dir+subject+'/',
-        imsize=imsize,
-        batch_size=batch_size,
-        train_val_split=train_val_split,
-        seed=seed,
-        classification_task=classification_task)
+    if dataset_type_generation == 'generative_dataset':
+        datamodule = GenerativeDatamodule(
+            dataset_dir+subject+'/',
+            imsize=imsize,
+            batch_size=batch_size,
+            train_val_split=train_val_split,
+            seed=seed,
+            classification_task=classification_task
+        )
+    else:
+        datamodule = CutPasteClassicDatamodule(
+            dataset_dir+subject+'/',
+            imsize=imsize,
+            batch_size=batch_size,
+            train_val_split=train_val_split,
+            classification_task=classification_task,
+            seed=seed
+        )
     datamodule.setup('fit')
     
     print('>>> setting up the model')
@@ -59,8 +91,8 @@ if __name__ == "__main__":
     #subjects = ['bottle', 'grid', 'screw', 'tile', 'toothbrush']
     subjects = ['bottle']
     for subject in subjects:
-        run_pipeline(dataset_dir, results_dir, subject, '3-way')
-        run_pipeline(dataset_dir, results_dir, subject, 'binary')
+        run_pipeline(dataset_dir, results_dir, subject, '3-way', 'classic_dataset')
+        run_pipeline(dataset_dir, results_dir, subject, '3-way', 'generative_dataset')
         
         
         

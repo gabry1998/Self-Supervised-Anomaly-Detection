@@ -1,5 +1,6 @@
 from self_supervised.datasets import GenerativeDatamodule
 from self_supervised.support.functional import *
+from self_supervised.support.cutpaste_parameters import CPP
 
 def test1():
     dataset_dir = '/home/ubuntu/TesiAnomalyDetection/dataset/'
@@ -32,6 +33,8 @@ def test2():
     print(y_hat1)
     print(y_hat2)
     
-    
 
-test2()
+def test3():
+    print(CPP.summary)
+
+test3()
