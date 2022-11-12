@@ -2,7 +2,8 @@ import random
 from PIL import Image, ImageFilter
 import numpy as np
 from .cutpaste_parameters import CPP
-from .functional import get_image_filenames, duplicate_filenames
+from .functional import get_image_filenames
+import time
 
 def generate_rotations(image):
     r90 = image.rotate(90)
@@ -84,75 +85,61 @@ def generate_dataset(
         duplication=False):
     
     raw_images_filenames = get_image_filenames(dataset_dir) # qualcosa come ../dataset/bottle/train/good/
-    if duplication:
-        raw_images_filenames = duplicate_filenames(
-            raw_images_filenames,
-            min_dataset_length
-        )
     
-    length = raw_images_filenames.shape[0]
-    if classification_task == '3-way':
-        labels = np.array(np.random.uniform(0,3, length), dtype=int)
-    if classification_task == 'binary':
-        labels = np.array(np.random.uniform(0,2, length), dtype=int)
-    else:
-        exit(1)
-    
+    #if duplication:
+    #    raw_images_filenames = duplicate_filenames(
+     #       raw_images_filenames,
+    #        min_dataset_length
+    #    )
+    #
     data = []
-    for i in range(length):
-        x = raw_images_filenames[i]
-        y = labels[i]
-        if classification_task == '3-way':
-            x = generate_cutpaste_3way(x, y)
-        if classification_task == 'binary':
-            x = generate_cutpaste_binary(x, y)
-        data.append(x)
+    labels = []
     
-    data = np.array(data)
+    augs = CPP.jitter_transforms
+    area_ratio_patch = CPP.cutpaste_augmentations['patch']['area_ratio']
+    aspect_ratio_patch = CPP.cutpaste_augmentations['patch']['aspect_ratio']
+    scar_width = CPP.cutpaste_augmentations['scar']['width']
+    scar_thiccness = CPP.cutpaste_augmentations['scar']['thiccness']
+    
+    print('generating dataset', '('+str(len(raw_images_filenames))+' filenames)')
+    start = time.time()
+    for filename in raw_images_filenames:
+        image = Image.open(filename).resize(imsize).convert('RGB')
+        r0, r90, r180, r270 = generate_rotations(image)
+        rotations = [r0, r90, r180, r270]
+
+        for img in rotations:
+            data.append(img)
+            labels.append(0)
+        
+            if classification_task=='binary':
+                if random.randint(0,1)==1:
+                    #cutpaste
+                    x, coords = generate_patch(img, area_ratio_patch, aspect_ratio_patch)
+                    x = apply_jittering(x, augs)
+                    new_img = paste_patch(img, x, coords)
+                    data.append(new_img)
+                    labels.append(1)
+                else:
+                    #scar
+                    x, coords = generate_scar(img.size, scar_width, scar_thiccness)
+                    new_img = paste_patch(img, x, coords, x)
+                    data.append(new_img)
+                    labels.append(1)
+                
+            if classification_task=='3-way':
+                #cutpaste
+                x, coords = generate_patch(img, area_ratio_patch, aspect_ratio_patch)
+                x = apply_jittering(x, augs)
+                new_img = paste_patch(img, x, coords)
+                data.append(new_img)
+                labels.append(1)
+                #scar
+                x, coords = generate_scar(img.size, scar_width, scar_thiccness)
+                new_img = paste_patch(img, x, coords, x)
+                data.append(new_img)
+                labels.append(2)
+    end = time.time() - start
+    print('done generation in ', str(end), 'sec')
+    
     return data, labels
-    
-def generate_cutpaste_3way(x, y, imsize=(256,256)):
-    x = Image.open(x).resize(imsize).convert('RGB')
-    x = generate_rotation(x)
-    if y == 0:
-        return x
-    if y == 1:
-        patch, coords = generate_patch(
-            x, 
-            CPP.cutpaste_augmentations['patch']['area_ratio'], 
-            CPP.cutpaste_augmentations['patch']['aspect_ratio'])
-        patch = apply_jittering(patch, CPP.jitter_transforms)
-        x = paste_patch(x, patch, coords)
-        return x
-    if y == 2:
-        patch, coords = generate_scar(
-            x.size, 
-            CPP.cutpaste_augmentations['scar']['width'], 
-            CPP.cutpaste_augmentations['scar']['thiccness'])
-        x = paste_patch(x, patch, coords, patch)
-        return x
-    
-
-def generate_cutpaste_binary(x, y, imsize=(256,256)):
-        x = Image.open(x).resize(imsize).convert('RGB')
-        x = generate_rotation(x)
-        if y == 0:
-            return x
-        else:
-            if random.randint(0,1) == 1:
-                patch, coords = generate_patch(
-                    x, 
-                    CPP.cutpaste_augmentations['patch']['area_ratio'], 
-                    CPP.cutpaste_augmentations['patch']['aspect_ratio'])
-                patch = apply_jittering(patch, CPP.jitter_transforms)
-                x = paste_patch(x, patch, coords)
-                return x
-            else:
-                patch, coords = generate_scar(
-                    x.size, 
-                    CPP.cutpaste_augmentations['scar']['width'], 
-                    CPP.cutpaste_augmentations['scar']['thiccness'])
-                x = paste_patch(x, patch, coords, patch)
-                return x
-
-    

@@ -1,4 +1,5 @@
 from self_supervised.datasets import GenerativeDatamodule
+from self_supervised.support.dataset_generator import generate_dataset
 from self_supervised.support.functional import *
 from self_supervised.support.cutpaste_parameters import CPP
 
@@ -37,4 +38,18 @@ def test2():
 def test3():
     print(CPP.summary)
 
-test3()
+def test4():
+    dataset_dir = '/home/ubuntu/TesiAnomalyDetection/dataset/'
+    subject = 'bottle'
+    x, y = generate_dataset(
+        dataset_dir+subject+'/train/good/',
+        classification_task='3-way',
+        duplication=True
+    )
+    x, y = list2np(x, y)
+    x, y = np2tensor(x, y)
+    print(x.shape, y.shape)
+    
+    print(x[0])
+
+test4()

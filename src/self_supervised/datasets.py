@@ -327,11 +327,15 @@ class CutPasteClassicDatamodule(pl.LightningDataModule):
                 min_dataset_length=self.min_dataset_length,
                 duplication=self.duplication
             )
+            training_data, training_labels = list2np(
+                training_data, 
+                training_labels
+            )
             training_data, training_labels = np2tensor(
                 training_data, 
                 training_labels
             )
-            training_data, training_labels, val_data, val_labels = tts(
+            training_data, val_data, training_labels, val_labels = tts(
                 training_data, 
                 training_labels, 
                 test_size=self.train_val_split,
@@ -359,6 +363,10 @@ class CutPasteClassicDatamodule(pl.LightningDataModule):
                 duplication=self.duplication
             )
             
+            test_data, test_labels = list2np(
+                test_data,
+                test_labels
+            )
             test_data, test_labels = np2tensor(
                 test_data,
                 test_labels
