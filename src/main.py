@@ -26,11 +26,11 @@ def run_pipeline(
     print('checkpoint name:', checkpoint_name)
     
     imsize=(256,256)
-    batch_size = 32
+    batch_size = 64
     train_val_split = 0.2
     seed = 0
     lr = 0.001
-    epochs = 5
+    epochs = 30
     
     print('image size:', imsize)
     print('batch size:', batch_size)
@@ -91,7 +91,7 @@ if __name__ == "__main__":
     dataset_dir = '/home/ubuntu/TesiAnomalyDetection/dataset/'
     results_dir = '/home/ubuntu/TesiAnomalyDetection/outputs/computations/'
     #subjects = ['bottle', 'grid', 'screw', 'tile', 'toothbrush']
-    subjects = ['bottle']
+    subjects = ['bottle', 'grid']
     for subject in subjects:
         run_pipeline(dataset_dir, results_dir, subject, '3-way', 'classic_dataset')
         run_pipeline(dataset_dir, results_dir, subject, '3-way', 'generative_dataset')
