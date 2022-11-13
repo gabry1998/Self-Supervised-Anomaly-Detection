@@ -2,6 +2,9 @@ from self_supervised.datasets import GenerativeDatamodule
 from self_supervised.support.dataset_generator import generate_dataset
 from self_supervised.support.functional import *
 from self_supervised.support.cutpaste_parameters import CPP
+from tqdm import tqdm
+import time
+
 
 def test1():
     dataset_dir = '/home/ubuntu/TesiAnomalyDetection/dataset/'
@@ -52,4 +55,32 @@ def test4():
     
     print(x[0])
 
-test4()
+def test5():
+    x = np.array([[1,2],[3,45]])
+    print(len(x))
+
+def test6():
+    
+    for i1 in tqdm(range(5),leave=False):
+        print('tante cose belle')
+        imsize=(256,256)
+        batch_size = 64
+        train_val_split = 0.2
+        seed = 0
+        lr = 0.001
+        epochs = 30
+        
+        print('image size:', imsize)
+        print('batch size:', batch_size)
+        print('split rate:', train_val_split)
+        print('seed:', seed)
+        print('optimizer:', 'SGD')
+        print('learning rate:', lr)
+        print('epochs:', epochs)
+    
+        for i2 in tqdm(range(300), leave=False):    
+            time.sleep(0.01)
+        
+        os.system('clear')
+
+test6()

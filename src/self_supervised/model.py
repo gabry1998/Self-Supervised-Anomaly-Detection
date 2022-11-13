@@ -4,6 +4,10 @@ from torchvision import models
 import pytorch_lightning as pl
 import torch.nn.functional as F
 from torchmetrics.functional import accuracy
+import importlib.util
+import sys
+from pytorch_lightning.callbacks.progress import ProgressBarBase
+from tqdm import tqdm
 
 class SSLModel(nn.Module):
   def __init__(self, 
@@ -78,10 +82,11 @@ class SSLModel(nn.Module):
     output = self.classifier(embeddings)
     return (output, embeddings)
 
+
 class SSLM(pl.LightningModule):
     def __init__(
             self,
-            task,
+            task:str='binary',
             lr=0.001,
             seed=0):
         super(SSLM, self).__init__()
@@ -154,6 +159,7 @@ class SSLM(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(self.model.parameters(), self.lr, momentum=0.9, weight_decay=0.00003)
         return optimizer
+
 
 class MetricTracker(pl.Callback):
   def __init__(self):

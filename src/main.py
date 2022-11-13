@@ -3,6 +3,8 @@ from self_supervised.model import SSLM, MetricTracker
 from self_supervised.support.visualization import plot_history
 import pytorch_lightning as pl
 from self_supervised.support.cutpaste_parameters import CPP
+from tqdm import tqdm
+import os
 
 
 def run_pipeline(
@@ -10,35 +12,24 @@ def run_pipeline(
         results_dir, 
         subject, 
         classification_task='binary', 
-        dataset_type_generation='classic_dataset'):
-    
-    print('#################')
-    print('>>> running pipeline ('+subject.upper()+')')
-    print('classification task:', classification_task)
-    print('dataset type generation:', dataset_type_generation)
-    print('cutpaste parameters:')
-    print(CPP.summary)
+        dataset_type_generation='classic_dataset',
+        args=None):
+    #print('subject:', subject.upper())
+    print('classification task:', classification_task.upper())
+    print('dataset type generation:', dataset_type_generation.upper())
     
     result_path = results_dir+subject+'/'+dataset_type_generation+'/'+classification_task+'/'
-    checkpoint_name = subject+'.ckpt'
+    checkpoint_name = 'best_model.ckpt'
     
     print('result dir:', result_path)
     print('checkpoint name:', checkpoint_name)
     
-    imsize=(256,256)
-    batch_size = 64
-    train_val_split = 0.2
-    seed = 0
-    lr = 0.001
-    epochs = 30
-    
-    print('image size:', imsize)
-    print('batch size:', batch_size)
-    print('split rate:', train_val_split)
-    print('seed:', seed)
-    print('optimizer:', 'SGD')
-    print('learning rate:', lr)
-    print('epochs:', epochs)
+    imsize = args['imsize']
+    batch_size = args['batch_size']
+    train_val_split = args['train_val_split']
+    seed = args['seed']
+    lr = args['lr']
+    epochs = args['epochs']
     
     
     print('>>> preparing datamodule')
@@ -62,7 +53,6 @@ def run_pipeline(
             seed=seed,
             duplication=True
         )
-    print(type(datamodule))
     
     print('>>> setting up the model')
     pretext_model = SSLM(classification_task, lr=lr, seed=seed)
@@ -74,29 +64,48 @@ def run_pipeline(
         max_epochs=epochs, 
         check_val_every_n_epoch=1,
         reload_dataloaders_every_n_epochs=10)
-
+    print('>>> start training')
     trainer.fit(pretext_model, datamodule=datamodule)
     trainer.save_checkpoint(result_path+checkpoint_name)
     
     print('>>> training plot')
     plot_history(cb.log_metrics, epochs, result_path, classification_task)
-        
-    print('>>> testing')
-    pretext_model = SSLM.load_from_checkpoint(result_path+checkpoint_name, model=pretext_model.model)
-    datamodule.setup('test')
-    trainer.test(pretext_model, dataloaders=datamodule.test_dataloader())
     
 
 if __name__ == "__main__":
     dataset_dir = '/home/ubuntu/TesiAnomalyDetection/dataset/'
     results_dir = '/home/ubuntu/TesiAnomalyDetection/outputs/computations/'
-    subjects = ['screw', 'tile', 'toothbrush']
-    #subjects = ['bottle', 'grid']
-    for subject in subjects:
-        run_pipeline(dataset_dir, results_dir, subject, '3-way', 'classic_dataset')
-        run_pipeline(dataset_dir, results_dir, subject, '3-way', 'generative_dataset')
-        run_pipeline(dataset_dir, results_dir, subject, 'binary', 'classic_dataset')
-        run_pipeline(dataset_dir, results_dir, subject, 'binary', 'generative_dataset')
+    
+    imsize=(256,256)
+    batch_size = 64
+    train_val_split = 0.2
+    seed = 0
+    lr = 0.001
+    epochs = 30
+    
+    args = {
+        'imsize': imsize,
+        'batch_size': batch_size,
+        'train_val_split': train_val_split,
+        'seed': seed,
+        'lr': lr,
+        'epochs': epochs
+    }
+    experiments = [
+        #('screw', '3-way', 'generative_dataset'),
+        ('toothbrush', '3-way', 'generative_dataset')
+    ]
+    pbar = tqdm(range(len(experiments)))
+    for i in pbar:
+        pbar.set_description('Pipeline Execution | current subject is '+experiments[i][0].upper())
+        run_pipeline(
+            dataset_dir, 
+            results_dir, 
+            experiments[i][0], 
+            experiments[i][1], 
+            experiments[i][2],
+            args)
+        os.system('clear')
         
         
         

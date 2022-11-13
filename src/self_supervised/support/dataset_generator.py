@@ -2,7 +2,7 @@ import random
 from PIL import Image, ImageFilter
 import numpy as np
 from .cutpaste_parameters import CPP
-from .functional import get_image_filenames
+from .functional import get_image_filenames, duplicate_filenames
 import time
 
 def generate_rotations(image):
@@ -80,18 +80,9 @@ def generate_scar(imsize:tuple, w_range=(2,16), h_range=(10,25)):
 def generate_dataset(
         dataset_dir:str, 
         imsize=(256,256),
-        classification_task:str='binary',
-        min_dataset_length:int=2000,
-        duplication=False):
+        classification_task:str='binary'):
     
     raw_images_filenames = get_image_filenames(dataset_dir) # qualcosa come ../dataset/bottle/train/good/
-    
-    #if duplication:
-    #    raw_images_filenames = duplicate_filenames(
-     #       raw_images_filenames,
-    #        min_dataset_length
-    #    )
-    #
     data = []
     labels = []
     

@@ -19,7 +19,6 @@ class CPP:
                             contrast = offset,
                             saturation = offset,
                             hue = offset)
-
     summary = yaml.dump(cutpaste_augmentations, default_flow_style=False)
 
 

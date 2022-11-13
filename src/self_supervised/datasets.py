@@ -10,6 +10,7 @@ from .support.functional import *
 from numpy.random import permutation
 
 
+# dataset per le vere immagini mvtec
 class MVTecDataset(Dataset):
     def __init__(
             self,
@@ -44,6 +45,33 @@ class MVTecDataset(Dataset):
         return self.images_filenames.shape[0]
 
 
+class MVTecDatamodule(pl.LightningDataModule):
+    def __init__(
+            self,
+            root_dir, #qualcosa come ../dataset/bottle/
+            subject,
+            imsize,
+            batch_size:int=64,  
+            seed=0):
+            
+        super().__init__()
+        self.root_dir = root_dir
+        self.subject = subject
+        self.imsize = imsize
+        self.batch_size = batch_size
+        self.seed = seed
+        
+        self.test_images_filenames = get_mvtec_test_images(self.root_dir+'/test/')
+    
+    def setup(self, stage=None) -> None:
+        self.test_dataset = MVTecDataset(
+            self.test_images_filenames,
+        )
+    
+    def test_dataloader(self):
+        return super().test_dataloader()
+ 
+# avanti con questo tipo di dataset
 class GenerativeDataset(Dataset):
     def __init__(
             self, 
@@ -122,33 +150,6 @@ class GenerativeDataset(Dataset):
                 return x
 
 
-class MVTecDatamodule(pl.LightningDataModule):
-    def __init__(
-            self,
-            root_dir, #qualcosa come ../dataset/bottle/
-            subject,
-            imsize,
-            batch_size:int=64,  
-            seed=0):
-            
-        super().__init__()
-        self.root_dir = root_dir
-        self.subject = subject
-        self.imsize = imsize
-        self.batch_size = batch_size
-        self.seed = seed
-        
-        self.test_images_filenames = get_mvtec_test_images(self.root_dir+'/test/')
-    
-    def setup(self, stage=None) -> None:
-        self.test_dataset = MVTecDataset(
-            self.test_images_filenames,
-        )
-    
-    def test_dataloader(self):
-        return super().test_dataloader()
-        
-
 class GenerativeDatamodule(pl.LightningDataModule):
     def __init__(
             self, 
@@ -158,7 +159,7 @@ class GenerativeDatamodule(pl.LightningDataModule):
             train_val_split:float=0.2,
             classification_task='binary',
             seed:int=0,
-            min_dataset_length=2000,
+            min_dataset_length=1000,
             duplication=False):
         
         super().__init__()
@@ -253,7 +254,7 @@ class GenerativeDatamodule(pl.LightningDataModule):
             shuffle=False,
             num_workers=8)
 
-
+# roba vecchia da rivedere
 class CutPasteClassicDataset(Dataset):
     def __init__(
             self, 
@@ -290,7 +291,7 @@ class CutPasteClassicDatamodule(pl.LightningDataModule):
             train_val_split:float=0.2,
             classification_task='binary',
             seed:int=0,
-            min_dataset_length=2000,
+            min_dataset_length=1000,
             duplication=False):
         
         super().__init__()
@@ -324,9 +325,7 @@ class CutPasteClassicDatamodule(pl.LightningDataModule):
             training_data, training_labels = generate_dataset(
                 self.root_dir_train,
                 imsize=self.imsize,
-                classification_task=self.classification_task,
-                min_dataset_length=self.min_dataset_length,
-                duplication=self.duplication
+                classification_task=self.classification_task
             )
             training_data, training_labels = list2np(
                 training_data, 
@@ -361,9 +360,7 @@ class CutPasteClassicDatamodule(pl.LightningDataModule):
             test_data, test_labels = generate_dataset(
                 self.root_dir_test,
                 imsize=self.imsize,
-                classification_task=self.classification_task,
-                min_dataset_length=self.min_dataset_length,
-                duplication=self.duplication
+                classification_task=self.classification_task
             )
             
             test_data, test_labels = list2np(
