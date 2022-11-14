@@ -6,6 +6,14 @@ from tqdm import tqdm
 import time
 
 
+import numpy as np
+from PIL import Image, ImageFilter
+import matplotlib.pyplot as plt
+import random
+from torchvision import transforms
+import glob
+
+
 def test1():
     dataset_dir = '/home/ubuntu/TesiAnomalyDetection/dataset/'
     subject = 'toothbrush'
@@ -83,4 +91,123 @@ def test6():
         
         os.system('clear')
 
-test6()
+def generate_rotations(image:Image):
+  r90 = image.rotate(90)
+  r180 = image.rotate(180)
+  r270 = image.rotate(270)
+  return image, r90, r180, r270
+
+
+def generate_patch(image:Image, 
+                    area_ratio=(0.02, 0.15), 
+                    aspect_ratio=((0.3, 1),(1, 3.3))):
+  #print('generate_patch', area_ratio)
+  img_area = image.size[0] * image.size[1]
+  patch_area = random.uniform(area_ratio[0], area_ratio[1]) * img_area
+  patch_aspect = random.choice([random.uniform(*aspect_ratio[0]), random.uniform(*aspect_ratio[1])])
+  patch_w  = int(np.sqrt(patch_area*patch_aspect))
+  patch_h = int(np.sqrt(patch_area/patch_aspect))
+  org_w, org_h = image.size
+
+  patch_left, patch_top = random.randint(0, org_w - patch_w), random.randint(0, org_h - patch_h)
+  patch_right, patch_bottom = patch_left + patch_w, patch_top + patch_h
+  paste_left, paste_top = random.randint(0, org_w - patch_w), random.randint(0, org_h - patch_h)
+  
+  return image.crop((patch_left, patch_top, patch_right, patch_bottom)), (paste_left, paste_top)
+
+
+def paste_patch(image, patch, coords, mask = None):
+  aug_image = image.copy()
+  aug_image.paste(patch, (coords[0], coords[1]), mask=mask)
+  return aug_image
+
+
+def apply_patch_augmentations(patch:Image, 
+                              augmentations:transforms.ColorJitter=None):
+  patch = patch.filter(ImageFilter.GaussianBlur(random.randint(0, 2)))
+  return augmentations(patch)
+
+
+def random_color():
+  return random.randint(10,240)
+
+
+def generate_scar(imsize:tuple, 
+                  w_range=(2,16), 
+                  h_range=(10,25)):
+  img_w, img_h = imsize
+
+  #dimensioni sezione
+  scar_w = random.randint(w_range[0], w_range[1])
+  scar_h = random.randint(h_range[0], h_range[1])
+
+  r = random_color()
+  g = random_color()
+  b = random_color()
+
+  color = (r,g,b)
+
+  scar = Image.new('RGBA', (scar_w, scar_h), color=color)
+  angle = random.randint(-45, 45)
+  scar = scar.rotate(angle, expand=True)
+
+  #posizione casuale della sezione
+  left, top = random.randint(0, img_w - scar_w), random.randint(0, img_h - scar_h)
+  return scar, (left, top)
+
+
+def get_impaths(main_path):
+  return sorted([f for f in glob.glob(main_path+'*.png', recursive = True)])
+
+
+def load_imgs(main_path, imsize):
+  filenames = get_impaths(main_path)
+  images = []
+  for impath in filenames:
+    x = Image.open(impath)
+    x = x.resize(imsize)
+    images.append(x)
+  return images
+
+
+def show_examples(subject, 
+                  colojitter_offset=0.1,
+                  area_ratio=(0.02, 0.15), 
+                  aspect_ratio=((0.3, 1),(1, 3.3)),
+                  scar_width=(2,16), 
+                  scar_thiccness=(10,25),
+                  figsize=(16,16),
+                  seed=0):
+  random.seed(seed)
+  
+  imsize=(256,256)
+  good0 = Image.open("dataset/"+subject+"/train/good/000.png").resize(imsize)
+  good1 = Image.open("dataset/"+subject+"/train/good/001.png").resize(imsize)
+  good2 = Image.open("dataset/"+subject+"/train/good/002.png").resize(imsize)
+  good3 = Image.open("dataset/"+subject+"/train/good/003.png").resize(imsize)
+  good4 = Image.open("dataset/"+subject+"/train/good/004.png").resize(imsize)
+  good5 = Image.open("dataset/"+subject+"/train/good/005.png").resize(imsize)
+  good6 = Image.open("dataset/"+subject+"/train/good/006.png").resize(imsize)
+  good7 = Image.open("dataset/"+subject+"/train/good/007.png").resize(imsize)
+
+  gb_examples = [good0, good1, good2, good3, good4, good5, good6, good7]
+  
+  
+  augs = transforms.ColorJitter(brightness = colojitter_offset,
+                                contrast = colojitter_offset,
+                                saturation = colojitter_offset,
+                                hue = colojitter_offset)
+
+  fig, axs = plt.subplots(3, 8, figsize=figsize)
+  for i in range(len(gb_examples)):
+    axs[0][i].axis('off')
+    axs[0][i].imshow(gb_examples[i])
+    axs[1][i].axis('off')
+    axs[1][i].imshow(gb_examples[i])
+    axs[2][i].axis('off')
+    axs[2][i].imshow(gb_examples[i])
+  fig.suptitle('bottle (good/cutpaste/scar')
+  os.makedirs('outputs/images/'+subject+'/')
+  fig.savefig('outputs/images/'+subject+'/artificial.png')
+
+show_examples('bottle')

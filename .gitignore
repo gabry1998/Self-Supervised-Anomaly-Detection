@@ -10,7 +10,7 @@ __pycache__/
 mvtec/
 dataset/
 lightning_logs/
-test.py
+src/test.py
 
 
 # Distribution / packaging
