@@ -11,6 +11,7 @@ def ground_truth(filename:str=None, imsize=(256,256)):
     else:
         return Image.new(mode='1', size=imsize)
 
+
 def get_image_filenames(main_path:str):
     return np.array(sorted([f for f in glob.glob(main_path+'*.png', recursive = True)]))
 
@@ -19,6 +20,7 @@ def get_mvtec_anomaly_classes(main_path:str):
     return np.array([name for name in os.listdir(main_path) if os.path.isdir(
                         os.path.join(main_path, name))
                     ])
+
 
 def get_mvtec_gt_filename_counterpart(filename:str, groundtruth_dir):
     filename_split = filename.rsplit('/', 2)
@@ -30,6 +32,7 @@ def get_mvtec_gt_filename_counterpart(filename:str, groundtruth_dir):
     image_name = image_name.split('.')
     return groundtruth_dir+defection+'/'+image_name[0]+'_mask'+'.'+image_name[1]
 
+
 def get_mvtec_test_images(main_path:str):
     anomaly_classes = get_mvtec_anomaly_classes(main_path)
     test_images = np.empty(0)
@@ -40,11 +43,13 @@ def get_mvtec_test_images(main_path:str):
         ])
     return test_images
 
+
 def duplicate_filenames(filenames, baseline=2000):
     dummy_copy = np.array(filenames, copy=True)
     while dummy_copy.shape[0] < baseline:
         dummy_copy = np.concatenate([dummy_copy, filenames], dtype=str)
     return dummy_copy
+
 
 def list2np(images, labels):
     x = np.array([np.array(a, dtype=np.float32) for a in images])
