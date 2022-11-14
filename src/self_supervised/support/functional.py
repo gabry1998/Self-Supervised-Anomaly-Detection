@@ -3,6 +3,8 @@ import glob
 import torch
 import os
 from PIL import Image
+from torch import Tensor
+
 
 
 def ground_truth(filename:str=None, imsize=(256,256)):
@@ -61,3 +63,11 @@ def np2tensor(images, labels):
     images = torch.as_tensor(images, dtype=torch.float32)
     labels = torch.as_tensor(labels, dtype=int)
     return images,labels
+
+
+def extract_patches(image:Tensor, dim=64, stride=32):
+    patches = image.unfold(2, dim, stride).unfold(3, dim, stride)
+    patches = patches.reshape(1, 3, -1, dim, dim)
+    patches = patches.squeeze()
+    patches = torch.permute(patches, (1,0,2,3))
+    return patches
