@@ -54,6 +54,20 @@ Those augmentations are only applied to the artificial anomalies (cutpaste patch
 The images labeled as '0' are augmentation-free. <br />
 All images have size (256,256) and are randomly rotated from a selection of [0, 90, 180, 270] degrees.
 
+### CutPaste Examples
+
+| Good |
+| :--: |
+| ![alt text](https://github.com/gabry1998/TesiAnomalyDetection/blob/main/readme_images/good.png) |
+
+| CutPaste |
+| :--: |
+| ![alt text](https://github.com/gabry1998/TesiAnomalyDetection/blob/main/readme_images/cutpaste.png) |
+
+| Scar |
+| :--: |
+| ![alt text](https://github.com/gabry1998/TesiAnomalyDetection/blob/main/readme_images/scar.png) |
+
 ### Network parameters
 
 (some are not equal to the paper's one)
@@ -70,4 +84,14 @@ All images have size (256,256) and are randomly rotated from a selection of [0, 
 | Momentum | 0.9 |
 | Weight decay rate | 0.00003 |
 | epochs | 30 |
+
+### Training Examples
+
+| Bottle ccuracy| Bottle loss |
+| :--: | :--: |
+| ![alt text](https://github.com/gabry1998/TesiAnomalyDetection/blob/main/readme_images/bottle_accuracy.png) | ![alt text](https://github.com/gabry1998/TesiAnomalyDetection/blob/main/readme_images/bottle_loss.png) |
+
+| Grid ccuracy| Grid loss |
+| :--: | :--: |
+| ![alt text](https://github.com/gabry1998/TesiAnomalyDetection/blob/main/readme_images/accuracy.png) | ![alt text](https://github.com/gabry1998/TesiAnomalyDetection/blob/main/readme_images/loss.png) |
 
