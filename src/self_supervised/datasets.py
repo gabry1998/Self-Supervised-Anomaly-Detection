@@ -9,7 +9,6 @@ from .support.cutpaste_parameters import CPP
 from .support.functional import *
 from numpy.random import permutation
 
-
 # dataset per le vere immagini mvtec
 class MVTecDataset(Dataset):
     def __init__(
@@ -18,28 +17,39 @@ class MVTecDataset(Dataset):
             subject,
             images_filenames,
             imsize=(256,256),
-            transform=None) -> None:
+            transform=None,
+            mode='test') -> None:
         super().__init__()
-        self.dataset_dir = dataset_dir,
+        self.dataset_dir = dataset_dir
         self.subject = subject
         self.images_filenames = images_filenames
         self.imsize = imsize
         self.transform = transform
+        self.mode = mode
     
     def __getitem__(self, index):
-        filename = self.images_filenames[index]
-        test_image = Image.open(filename).resize(self.imsize).convert('RGB')
-        
-        gt_filename = get_mvtec_gt_filename_counterpart(
-            filename,
-            self.dataset_dir+self.subject+'/ground_truth/')
-        
-        gt = ground_truth(gt_filename, self.imsize)
-        
-        if self.transform:
-            test_image = self.transform(test_image)
+        if self.mode == 'test':
+            filename = self.images_filenames[index]
+            test_image = Image.open(filename).resize(self.imsize).convert('RGB')
             
-        return test_image, gt
+            gt_filename = get_mvtec_gt_filename_counterpart(
+                filename,
+                self.dataset_dir+'/ground_truth/')
+            
+            gt = ground_truth(gt_filename, self.imsize)
+            
+            if self.transform:
+                test_image = self.transform(test_image)
+            gt = transforms.ToTensor()(gt)
+            return test_image, gt
+        else:
+            filename = self.images_filenames[index]
+            train_image = Image.open(filename).resize(self.imsize).convert('RGB')
+            gt = ground_truth(None, self.imsize)
+            if self.transform:
+                train_image = self.transform(train_image)
+            gt = transforms.ToTensor()(gt)
+            return train_image, gt
     
     def __len__(self):
         return self.images_filenames.shape[0]
@@ -61,15 +71,43 @@ class MVTecDatamodule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.seed = seed
         
+        self.transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+        ])
+        
+        self.train_images_filenames = get_image_filenames(self.root_dir+'/train/good/')
         self.test_images_filenames = get_mvtec_test_images(self.root_dir+'/test/')
     
     def setup(self, stage=None) -> None:
+        self.train_dataset = MVTecDataset(
+            self.root_dir,
+            self.subject,
+            self.train_images_filenames,
+            transform=self.transform,
+            mode='train'
+        )
         self.test_dataset = MVTecDataset(
+            self.root_dir,
+            self.subject,
             self.test_images_filenames,
+            transform=self.transform,
+            mode='test'
         )
     
+    def train_dataloader(self):
+        return DataLoader(
+            self.train_dataset, 
+            batch_size=self.batch_size, 
+            shuffle=True,
+            num_workers=8)
+    
     def test_dataloader(self):
-        return super().test_dataloader()
+        return DataLoader(
+            self.test_dataset, 
+            batch_size=self.batch_size, 
+            shuffle=True,
+            num_workers=8)
  
 # avanti con questo tipo di dataset
 class GenerativeDataset(Dataset):
@@ -386,12 +424,14 @@ class CutPasteClassicDatamodule(pl.LightningDataModule):
             shuffle=True,
             num_workers=8)
 
+
     def val_dataloader(self):
         return DataLoader(
             self.val_dataset, 
             batch_size=self.batch_size, 
             shuffle=False,
             num_workers=8)
+
 
     def test_dataloader(self):
         return DataLoader(

@@ -1,4 +1,4 @@
-from self_supervised.datasets import GenerativeDatamodule
+from self_supervised.datasets import GenerativeDatamodule, MVTecDatamodule
 from self_supervised.model import *
 from self_supervised.support.dataset_generator import generate_dataset
 from self_supervised.support.functional import *
@@ -16,6 +16,7 @@ from torchvision import transforms
 import glob
 import pandas as pd
 import math
+from sklearn.metrics import roc_curve, auc
 
 
 
@@ -195,44 +196,82 @@ def extract_patch_embeddings(self, image):
       
       
 def test7():
-    subject:str = 'bottle'
-    dataset_type_gen:str = 'generative_dataset'
-    classification_task:str = '3-way'
-    results_dir = 'outputs/computations/'+subject+'/'+dataset_type_gen+'/'+classification_task+'/'
-    model_dir = results_dir+'/best_model.ckpt'
-    dataset_dir = 'dataset/'+subject
-    sslm = SSLM('3-way')
-    sslm = SSLM.load_from_checkpoint(model_dir, model=sslm.model)
 
-    random.seed(0)
-    np.random.seed(0)
-    print('generating dataset')
-    start = time.time()
-    datamodule = GenerativeDatamodule(
-                dataset_dir,
-                classification_task='3-way',
-                min_dataset_length=500,
-                duplication=True
+    datamodule = MVTecDatamodule(
+      'dataset/bottle/',
+      'bottle',
+      (256,256),
+      64,
+      0
     )
-
-
-    datamodule.setup('test')
-    end = time.time() - start
-    print('generated in '+str(end)+ 'sec')
-
-    x,y = next(iter(datamodule.test_dataloader())) 
+    datamodule.setup()
     
-    patches = extract_patches(x[0], 32, 4)
+    sslm = SSLM.load_from_checkpoint('outputs/computations/bottle/generative_dataset/3-way/best_model.ckpt')
     
-    y_hat, embeddings = sslm(x)
-
-    y_hat = torch.max(y_hat.data, 1)
-    y_hat = y_hat.indices
+    #x,y = next(iter(datamodule.test_dataloader()))
     
-    embeddings = embeddings.detach()
+    train_embed = []
+    for x, _ in datamodule.train_dataloader():
+      y_hat, embeddings = sslm(x)
+      embeddings = embeddings.detach()
+      train_embed.append(embeddings)
+    train_embed = torch.cat(train_embed)
+
     
-    print(y_hat.shape)
-    print(embeddings.shape)
+    print(train_embed.shape)
+    #y_hat = torch.max(y_hat.data, 1)
+    #y_hat = y_hat.indices
+    
+    
+    test_labels = []
+    test_embeds = []
+    with torch.no_grad():
+        for x, label in datamodule.test_dataloader():
+            y_hat, embeddings = sslm(x)
 
+            # save 
+            test_embeds.append(embeddings.detach())
+            test_labels.append(label.detach())
+    test_labels = torch.cat(test_labels)
+    test_embeds = torch.cat(test_embeds)
+    
+    print(test_embeds.shape)
+    print(test_labels.shape)
+    test_embeds = torch.nn.functional.normalize(test_embeds, p=2, dim=1)
+    train_embed = torch.nn.functional.normalize(train_embed, p=2, dim=1)
+    
+    gde = GaussianDensityTorch()
+    gde.fit(train_embed)
+    scores = gde.predict(test_embeds)
+    
+    print(scores.shape)
+    print(scores)
 
+    
+    
+    int_labels = []
+    for x in test_labels:
+      if torch.sum(x) == 0:
+        int_labels.append(0)
+      else:
+        int_labels.append(1)
+    print(int_labels)
+    test_labels = torch.tensor(int_labels)
+    
+    fpr, tpr, _ = roc_curve(test_labels, scores)
+    roc_auc = auc(fpr, tpr)
+
+    #plot roc
+    plt.figure()
+    lw = 2
+    plt.plot(fpr, tpr, color='darkorange',
+            lw=lw, label='ROC curve (area = %0.2f)' % roc_auc)
+    plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.legend(loc="lower right")
+    plt.savefig('test_roc.png')
+    plt.close()
 test7()
