@@ -15,6 +15,7 @@ import random
 from torchvision import transforms
 import glob
 import pandas as pd
+import math
 
 
 
@@ -100,66 +101,6 @@ def test6():
         os.system('clear')
 
 
-def test7():
-  subject:str = 'bottle',
-  dataset_type_gen:str = 'generative_dataset',
-  classification_task:str = '3-way'
-  results_dir = 'outputs/computations/'+subject+'/'+dataset_type_gen+'/'+classification_task+'/'
-  model_dir = results_dir+'/best_model.ckpt'
-  dataset_dir = 'dataset/'+subject
-  sslm = SSLM('3-way')
-  sslm = SSLM.load_from_checkpoint(model_dir, model=sslm.model)
-
-  random.seed(0)
-  np.random.seed(0)
-  print('generating dataset')
-  start = time.time()
-  datamodule = GenerativeDatamodule(
-              dataset_dir,
-              classification_task='3-way',
-              min_dataset_length=500,
-              duplication=True
-  )
-
-
-  datamodule.setup('test')
-  end = time.time() - start
-  print('generated in '+str(end)+ 'sec')
-
-  x,y = next(iter(datamodule.test_dataloader())) 
-  y_hat, embeddings = sslm(x)
-
-  y_hat = torch.max(y_hat.data, 1)
-  y_hat = y_hat.indices
-
-  result = classification_report( 
-          y,
-          y_hat,
-          labels=[0,1,2],
-          output_dict=True
-      )
-  df = pd.DataFrame.from_dict(result)
-  print(df)
-  df.to_csv(results_dir+'/metric_report.csv', index = False)
-
-  tsne = TSNE(n_components=2, random_state=0)
-  tsne_results = tsne.fit_transform(embeddings.detach().numpy())
-  tx = tsne_results[:, 0]
-  ty = tsne_results[:, 1]
-
-  df = pd.DataFrame()
-  df["labels"] = y
-  df["comp-1"] = tx
-  df["comp-2"] = ty
-  plt.figure()
-  sns.scatterplot(hue=df.labels.tolist(),
-                  x='comp-1',
-                  y='comp-2',
-                  palette=sns.color_palette("hls", 3),
-                  data=df).set(title='Embeddings projection ('+subject+', '+classification_task+')') 
-  plt.savefig(results_dir+'/tsne.png')
-
-
 def generate_rotations(image:Image):
   r90 = image.rotate(90)
   r180 = image.rotate(180)
@@ -239,45 +180,59 @@ def load_imgs(main_path, imsize):
   return images
 
 
-def show_examples(subject, 
-                  colojitter_offset=0.1,
-                  area_ratio=(0.02, 0.15), 
-                  aspect_ratio=((0.3, 1),(1, 3.3)),
-                  scar_width=(2,16), 
-                  scar_thiccness=(10,25),
-                  figsize=(16,16),
-                  seed=0):
-  random.seed(seed)
-  
-  imsize=(256,256)
-  good0 = Image.open("dataset/"+subject+"/train/good/000.png").resize(imsize)
-  good1 = Image.open("dataset/"+subject+"/train/good/001.png").resize(imsize)
-  good2 = Image.open("dataset/"+subject+"/train/good/002.png").resize(imsize)
-  good3 = Image.open("dataset/"+subject+"/train/good/003.png").resize(imsize)
-  good4 = Image.open("dataset/"+subject+"/train/good/004.png").resize(imsize)
-  good5 = Image.open("dataset/"+subject+"/train/good/005.png").resize(imsize)
-  good6 = Image.open("dataset/"+subject+"/train/good/006.png").resize(imsize)
-  good7 = Image.open("dataset/"+subject+"/train/good/007.png").resize(imsize)
+def extract_patch_embeddings(self, image):
+    patches = self.extract_image_patches(image)
+    patch_embeddings =[]
+    with torch.no_grad():
+      for patch in patches:
+          logits, patch_embed = self.anomaly.cutpaste_model(patch.to(self.device))
+          patch_embeddings.append(patch_embed.to('cpu'))
+          del logits, patch
 
-  gb_examples = [good0, good1, good2, good3, good4, good5, good6, good7]
-  
-  
-  augs = transforms.ColorJitter(brightness = colojitter_offset,
-                                contrast = colojitter_offset,
-                                saturation = colojitter_offset,
-                                hue = colojitter_offset)
+    patch_dim = math.sqrt(len(patches)*self.batch_size)
+    patch_matrix = torch.cat(patch_embeddings).reshape(int(patch_dim), int(patch_dim), -1)
+    return patch_matrix
+      
+      
+def test7():
+    subject:str = 'bottle'
+    dataset_type_gen:str = 'generative_dataset'
+    classification_task:str = '3-way'
+    results_dir = 'outputs/computations/'+subject+'/'+dataset_type_gen+'/'+classification_task+'/'
+    model_dir = results_dir+'/best_model.ckpt'
+    dataset_dir = 'dataset/'+subject
+    sslm = SSLM('3-way')
+    sslm = SSLM.load_from_checkpoint(model_dir, model=sslm.model)
 
-  fig, axs = plt.subplots(3, 8, figsize=figsize)
-  for i in range(len(gb_examples)):
-    axs[0][i].axis('off')
-    axs[0][i].imshow(gb_examples[i])
-    axs[1][i].axis('off')
-    axs[1][i].imshow(gb_examples[i])
-    axs[2][i].axis('off')
-    axs[2][i].imshow(gb_examples[i])
-  fig.suptitle('bottle (good/cutpaste/scar')
-  os.makedirs('outputs/images/'+subject+'/')
-  fig.savefig('outputs/images/'+subject+'/artificial.png')
+    random.seed(0)
+    np.random.seed(0)
+    print('generating dataset')
+    start = time.time()
+    datamodule = GenerativeDatamodule(
+                dataset_dir,
+                classification_task='3-way',
+                min_dataset_length=500,
+                duplication=True
+    )
 
 
-show_examples('bottle')
+    datamodule.setup('test')
+    end = time.time() - start
+    print('generated in '+str(end)+ 'sec')
+
+    x,y = next(iter(datamodule.test_dataloader())) 
+    
+    patches = extract_patches(x[0], 32, 4)
+    
+    y_hat, embeddings = sslm(x)
+
+    y_hat = torch.max(y_hat.data, 1)
+    y_hat = y_hat.indices
+    
+    embeddings = embeddings.detach()
+    
+    print(y_hat.shape)
+    print(embeddings.shape)
+
+
+test7()

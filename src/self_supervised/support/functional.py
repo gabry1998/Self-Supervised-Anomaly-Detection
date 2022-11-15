@@ -4,6 +4,7 @@ import torch
 import os
 from PIL import Image
 from torch import Tensor
+from sklearn.neighbors import KernelDensity
 
 
 
@@ -71,3 +72,9 @@ def extract_patches(image:Tensor, dim=64, stride=32):
     patches = patches.squeeze()
     patches = torch.permute(patches, (1,0,2,3))
     return patches
+
+
+class GDE():
+    def fit(self, embeddings):
+        self.kde = KernelDensity(kernel='gaussian', bandwidth=1).fit(embeddings)
+        
