@@ -17,6 +17,7 @@ import glob
 import pandas as pd
 import math
 from sklearn.metrics import roc_curve, auc
+import cv2
 
 
 
@@ -207,15 +208,15 @@ def test7():
     datamodule.setup()
     
     sslm = SSLM.load_from_checkpoint('outputs/computations/bottle/generative_dataset/3-way/best_model.ckpt')
-    
+    sslm.to('cuda')
     #x,y = next(iter(datamodule.test_dataloader()))
     
     train_embed = []
     for x, _ in datamodule.train_dataloader():
-      y_hat, embeddings = sslm(x)
-      embeddings = embeddings.detach()
+      y_hat, embeddings = sslm(x.to('cuda'))
+      embeddings = embeddings.to('cpu')
       train_embed.append(embeddings)
-    train_embed = torch.cat(train_embed)
+    train_embed = torch.cat(train_embed).to('cpu').detach()
 
     
     print(train_embed.shape)
@@ -227,11 +228,11 @@ def test7():
     test_embeds = []
     with torch.no_grad():
         for x, label in datamodule.test_dataloader():
-            y_hat, embeddings = sslm(x)
+            y_hat, embeddings = sslm(x.to('cuda'))
 
             # save 
-            test_embeds.append(embeddings.detach())
-            test_labels.append(label.detach())
+            test_embeds.append(embeddings.to('cpu').detach())
+            test_labels.append(label.to('cpu').detach())
     test_labels = torch.cat(test_labels)
     test_embeds = torch.cat(test_embeds)
     
@@ -240,7 +241,7 @@ def test7():
     test_embeds = torch.nn.functional.normalize(test_embeds, p=2, dim=1)
     train_embed = torch.nn.functional.normalize(train_embed, p=2, dim=1)
     
-    gde = GaussianDensityTorch()
+    gde = GDE()
     gde.fit(train_embed)
     scores = gde.predict(test_embeds)
     
@@ -258,20 +259,115 @@ def test7():
     print(int_labels)
     test_labels = torch.tensor(int_labels)
     
-    fpr, tpr, _ = roc_curve(test_labels, scores)
-    roc_auc = auc(fpr, tpr)
+    plot_roc(test_labels, scores, 'bottle')
 
-    #plot roc
-    plt.figure()
-    lw = 2
-    plt.plot(fpr, tpr, color='darkorange',
-            lw=lw, label='ROC curve (area = %0.2f)' % roc_auc)
-    plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.legend(loc="lower right")
-    plt.savefig('test_roc.png')
-    plt.close()
-test7()
+
+def extract_image_patches(image):
+    unfold = torch.nn.Unfold((32, 32), stride=4)
+    image_patches = unfold(image).squeeze(0).reshape(-1, 3, 32, 32)
+    batched_patches = torch.split(image_patches, 128)
+    return batched_patches
+    #return image_patches
+
+def extract_patch_embeddings(image, sslm):
+    patches = extract_image_patches(image)
+    patch_embeddings =[]
+    with torch.no_grad():
+        for patch in patches:
+            logits, patch_embed = sslm(patch.to('cuda'))
+            patch_embeddings.append(patch_embed.to('cpu'))
+            del logits, patch
+
+    patch_dim = math.sqrt(len(patches)*128)
+    patch_matrix = torch.cat(patch_embeddings).reshape(int(patch_dim), int(patch_dim), -1)
+    return patch_matrix
+
+
+def test8():
+    print('uploading test image')
+    imsize = (256,256)
+    defect_type = 'good'
+    input_image = Image.open('dataset/bottle/test/'+defect_type+'/000.png').resize(imsize).convert('RGB')
+    #gt = Image.open('dataset/bottle/ground_truth/good/000_mask.png').resize(imsize)
+    sslm = SSLM.load_from_checkpoint(
+        'outputs/computations/bottle/generative_dataset/3-way/best_model.ckpt')
+    #sslm.to('cuda')
+    sslm.eval()
+    sslm.model.set_for_localization(True)
+    x = transforms.ToTensor()(input_image)
+    x = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(x)
+    
+    #y = transforms.ToTensor()(gt)
+    
+    x = x[None, :]
+    _, l1, l2, l3, l4 = sslm.model.compute_features(x)
+    preds, embeds = sslm(x)
+    
+    pred = torch.argmax(preds).item()
+    if pred == 2:
+      pred = 1
+    #print(pred)
+    preds[:, pred].backward()
+    g = sslm.model.gradients
+    #print(g.shape)
+    #print(l4.shape)
+    for i in range(512):
+        l4[0, i, :, :] *= g[0][i]
+    
+    l4 = l4.detach()
+    
+    heatmap = torch.mean(l4, dim=1).squeeze()
+    heatmap = np.maximum(heatmap, 0)
+    
+    
+    heatmap = heatmap / torch.max(heatmap)
+    heatmap = heatmap.numpy()
+    
+    if pred == 0:
+      figtitle = 'good'
+    else:  
+      figtitle = 'defect'
+    
+    #print(heatmap.shape)
+    plt.title(defect_type+' ('+figtitle+')')
+    plt.imshow(heatmap)
+    if pred == 1 and defect_type == 'good':
+      plt.savefig('gradcam/false_'+defect_type+'_feature.png')
+    else:
+      plt.savefig('gradcam/'+defect_type+'_feature.png')
+
+    #gs = GaussianSmooth()
+    #heatmap = gs.upsample(np.array(torch.tensor(heatmap)[None, :]))
+    #print(heatmap.shape)
+    #heatmap = heatmap[0]
+    heatmap = cv2.resize(heatmap, (input_image.size[1], input_image.size[0]))
+    heatmap = np.uint8(255 * heatmap)
+    heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
+    superimposed_img = heatmap * 0.4 + input_image
+    superimposed_img = np.uint8(255 * superimposed_img / np.max(superimposed_img))
+    superimposed_img = cv2.cvtColor(superimposed_img, cv2.COLOR_BGR2RGB)
+    plt.title(defect_type+' ('+figtitle+')')
+    plt.imshow(superimposed_img)
+    if pred == 1 and defect_type == 'good':
+      plt.savefig('gradcam/false_'+defect_type+'_gradcam.png')
+    else:
+      plt.savefig('gradcam/'+defect_type+'_gradcam.png')
+
+
+def test9():
+    x = torch.randn((3,2,2))
+    x = x[None, :]
+    print(x.shape)
+    gs = GaussianSmooth()
+    
+    c1 = x[:, 0, :, :]
+    c2 = x[:, 1, :, :]
+    c3 = x[:, 2, :, :]
+    y1 = torch.tensor(gs.upsample(np.array(c1)))
+    y2 = torch.tensor(gs.upsample(np.array(c2)))
+    y3 = torch.tensor(gs.upsample(np.array(c3)))
+    
+    out = torch.stack((y1,y2,y3)).permute(1,0,2,3)
+    print(out.shape)
+
+test8()

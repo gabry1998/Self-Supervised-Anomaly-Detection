@@ -4,8 +4,9 @@ import torch
 import os
 from PIL import Image
 from torch import Tensor
-from sklearn.neighbors import KernelDensity
-from sklearn.covariance import LedoitWolf
+import matplotlib.pyplot as plt
+from sklearn.metrics import roc_curve, auc
+from scipy import signal
 
 
 
@@ -75,48 +76,57 @@ def extract_patches(image:Tensor, dim=64, stride=32):
     return patches
 
 
-class GDE():
-    def fit(self, embeddings):
-        self.kde = KernelDensity(kernel='gaussian', bandwidth=1).fit(embeddings)
-        
-    def predict(self, embeddings):
-        scores = self.kde.score_samples(embeddings)
-        scores = -scores
-        return scores
+def plot_roc(labels:Tensor, scores:Tensor, subject:str):
+    fpr, tpr, _ = roc_curve(labels, scores)
+    roc_auc = auc(fpr, tpr)
 
-class GaussianDensityTorch(object):
-    """Gaussian Density estimation similar to the implementation used by Ripple et al.
-    The code of Ripple et al. can be found here: https://github.com/ORippler/gaussian-ad-mvtec.
-    """
-    def fit(self, embeddings):
-        self.mean = torch.mean(embeddings, axis=0)
-        self.inv_cov = torch.Tensor(LedoitWolf().fit(embeddings.cpu()).precision_,device="cpu")
+    #plot roc
+    plt.figure()
+    lw = 2
+    plt.plot(fpr, tpr, color='darkorange',
+            lw=lw, label='ROC curve (area = %0.2f)' % roc_auc)
+    plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.title('Roc curve ['+subject+']')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.legend(loc="lower right")
+    plt.savefig('test_roc.png')
+    plt.close()
 
-    def predict(self, embeddings):
-        distances = self.mahalanobis_distance(embeddings, self.mean, self.inv_cov)
-        return distances
 
-    @staticmethod
-    def mahalanobis_distance(
-        values: torch.Tensor, mean: torch.Tensor, inv_covariance: torch.Tensor
-    ) -> torch.Tensor:
-        """Compute the batched mahalanobis distance.
-        values is a batch of feature vectors.
-        mean is either the mean of the distribution to compare, or a second
-        batch of feature vectors.
-        inv_covariance is the inverse covariance of the target distribution.
-        from https://github.com/ORippler/gaussian-ad-mvtec/blob/4e85fb5224eee13e8643b684c8ef15ab7d5d016e/src/gaussian/model.py#L308
-        """
-        assert values.dim() == 2
-        assert 1 <= mean.dim() <= 2
-        assert len(inv_covariance.shape) == 2
-        assert values.shape[1] == mean.shape[-1]
-        assert mean.shape[-1] == inv_covariance.shape[0]
-        assert inv_covariance.shape[0] == inv_covariance.shape[1]
+class GaussianSmooth:
+    def __init__(self, kernel_size=32, stride=4, std=None, device=None):
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.std = self.kernel_size_to_std() if not std else std
+        if device:
+            self.device = device 
+        else:
+            self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    
+    
+    def kernel_size_to_std(self):
+        return np.log10(0.45*self.kernel_size + 1) + 0.25 if self.kernel_size < 32 else 10
 
-        if mean.dim() == 1:  # Distribution mean.
-            mean = mean.unsqueeze(0)
-        x_mu = values - mean  # batch x features
-        # Same as dist = x_mu.t() * inv_covariance * x_mu batch wise
-        dist = torch.einsum("im,mn,in->i", x_mu, inv_covariance, x_mu)
-        return dist.sqrt()
+    def gkern(self):
+    
+        if self.kernel_size % 2 == 0:
+            # if kernel size is even, signal.gaussian returns center values sampled from gaussian at x=-1 and x=1
+            # which is much less than 1.0 (depending on std). Instead, sample with kernel size k-1 and duplicate center
+            # value, which is 1.0. Then divide whole signal by 2, because the duplicate results in a too high signal.
+            gkern1d = signal.gaussian(self.kernel_size - 1, std=self.std).reshape(self.kernel_size - 1, 1)
+            gkern1d = np.insert(gkern1d, (self.kernel_size - 1) // 2, gkern1d[(self.kernel_size - 1) // 2]) / 2
+        else:
+            gkern1d = signal.gaussian(self.kernel_size, std=self.std).reshape(self.kernel_size, 1)
+        gkern2d = np.outer(gkern1d, gkern1d)
+        return gkern2d
+    
+    def upsample(self, X):
+        tconv = torch.nn.ConvTranspose2d(1,1, kernel_size=self.kernel_size, stride=self.stride)
+        tconv.weight.data = torch.from_numpy(self.gkern()).unsqueeze(0).unsqueeze(0).float()
+        tconv.to(self.device)
+        X = torch.from_numpy(X).float().to(self.device)
+        out = tconv(X).detach().cpu().numpy()
+        return out

@@ -4,83 +4,104 @@ from torchvision import models
 import pytorch_lightning as pl
 import torch.nn.functional as F
 from torchmetrics.functional import accuracy
-import importlib.util
-import sys
-from pytorch_lightning.callbacks.progress import ProgressBarBase
-from tqdm import tqdm
+import random
+import numpy as np
+from sklearn.neighbors import KernelDensity
+
+
 
 class SSLModel(nn.Module):
-  def __init__(self, 
-               num_classes,
-               seed=0):
-    super().__init__()
-    self.seed = seed
-    self.num_classes = num_classes
-    #random.seed(seed)
-    #np.random.seed(seed)
-    #torch.random.manual_seed(seed)
+    def __init__(self, 
+                num_classes,
+                seed=0,
+                dims = [512,512,512,512,512,512,512,512,128]):
+        super().__init__()
+        self.seed = seed
+        self.num_classes = num_classes
+        self.localization = False
 
-    self.feature_extractor = getattr(models, 'resnet18')(weights="IMAGENET1K_V1")
-    last_layer= list(self.feature_extractor.named_modules())[-1][0].split('.')[0]
-    setattr(self.feature_extractor, last_layer, nn.Identity())
+        self.feature_extractor = self.setup_default_feature_extractor()
+        self.projection_head = self.setup_default_projection_head(dims)
+        self.classifier = nn.Linear(128, self.num_classes)
+        
+        self.gradients = None
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.random.manual_seed(seed)
 
-    self.feature_extractor.eval()
-    for param in self.feature_extractor.parameters():
-        param.requires_grad = False
-
-    self.feature_extractor.fc = nn.Identity()
-    self.projection_head = nn.Sequential(
-        nn.Linear(512, 512),
-        nn.BatchNorm1d(512),
-        nn.ReLU(inplace=True),
-
-        nn.Linear(512, 512),
-        nn.BatchNorm1d(512),
-        nn.ReLU(inplace=True),
-
-        nn.Linear(512, 512),
-        nn.BatchNorm1d(512),
-        nn.ReLU(inplace=True),
-
-        nn.Linear(512, 512),
-        nn.BatchNorm1d(512),
-        nn.ReLU(inplace=True),
-
-        nn.Linear(512, 512),
-        nn.BatchNorm1d(512),
-        nn.ReLU(inplace=True),
-
-        nn.Linear(512, 128),
-        nn.BatchNorm1d(128),
-        nn.ReLU(inplace=True)
-
+    
+    def setup_default_projection_head(self, dims):
+        proj_layers = []
+        for d in dims[:-1]:
+            proj_layers.append(nn.Linear(d,d, bias=False)),
+            proj_layers.append((nn.BatchNorm1d(d))),
+            proj_layers.append(nn.ReLU(inplace=True))
+        embeds = nn.Linear(dims[-2], dims[-1], bias=self.num_classes > 0)
+        proj_layers.append(embeds)
+        
+        projection_head = nn.Sequential(
+            *proj_layers
         )
-    self.classifier = nn.Linear(128, self.num_classes)
-      
-  def compute_features(self, x):
-      x = x.float()
-      x = self.feature_extractor.conv1(x)
-      x = self.feature_extractor.bn1(x)
-      x = self.feature_extractor.relu(x)
-      x = self.feature_extractor.maxpool(x)
+        return projection_head
+    
+    
+    def setup_default_feature_extractor(self):
+        fe = getattr(models, 'resnet18')(weights="IMAGENET1K_V1")
+        last_layer= list(fe.named_modules())[-1][0].split('.')[0]
+        setattr(fe, last_layer, nn.Identity())
 
-      l1 = self.feature_extractor.layer1(x)
-      l2 = self.feature_extractor.layer2(l1)
-      l3 = self.feature_extractor.layer3(l2)
-      l4 = self.feature_extractor.layer4(l3)
+        fe.eval()
+        for param in fe.parameters():
+            param.requires_grad = False
 
-      x = self.feature_extractor.avgpool(l4)
-      x = torch.flatten(x, 1)
-      return (x, l1, l2, l3, l4)
+        fe.fc = nn.Identity()
+        return fe
+    
+    
+    def get_activations_gradient(self):
+        return self.gradients
+    
+    
+    def set_for_localization(self, p=False):
+        if p:
+            for param in self.feature_extractor.parameters():
+                param.requires_grad = True
+        self.localization = p
+    
+        
+    def compute_features(self, x):
+        x = x.float()
+        x = self.feature_extractor.conv1(x)
+        x = self.feature_extractor.bn1(x)
+        x = self.feature_extractor.relu(x)
+        x = self.feature_extractor.maxpool(x)
+
+        l1 = self.feature_extractor.layer1(x)
+        l2 = self.feature_extractor.layer2(l1)
+        l3 = self.feature_extractor.layer3(l2)
+        l4 = self.feature_extractor.layer4(l3)
+    
+        avg_pool = self.feature_extractor.avgpool(l4)
+        
+        return (avg_pool, l1, l2, l3, l4)
 
 
-  def forward(self, x):
-    x = x.float()
-    features = self.feature_extractor(x)
-    #features = features.view(features.size(0), -1)
-    embeddings = self.projection_head(features)
-    output = self.classifier(embeddings)
-    return (output, embeddings)
+    def forward(self, x):
+        x = x.float()
+        features = self.feature_extractor(x)
+        
+        hooker = features
+        
+        if self.localization:
+            def __extract_grad(grad):
+                self.gradients = grad
+            hooker.register_hook(__extract_grad)
+        
+        
+        features = torch.flatten(features, 1)
+        embeddings = self.projection_head(features)
+        output = self.classifier(embeddings)
+        return (output, embeddings)
 
 
 class SSLM(pl.LightningModule):
@@ -97,16 +118,17 @@ class SSLM(pl.LightningModule):
         self.num_classes = 3 if task == '3-way' else 2
         self.seed = seed
 
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.random.manual_seed(seed)
+        
         self.model = SSLModel(self.num_classes)
-
-        #random.seed(seed)
-        #np.random.seed(seed)
-        #torch.random.manual_seed(seed)
 
     
     def forward(self, x):
         output, embeddings = self.model(x)
         return  output, embeddings
+    
     
     def training_step(self, batch, batch_idx):    
         x, y = batch
@@ -122,6 +144,7 @@ class SSLM(pl.LightningModule):
 
         return loss
 
+
     def validation_step(self, batch, batch_idx):
         loss, acc = self._shared_eval_step(batch, batch_idx)
 
@@ -132,6 +155,7 @@ class SSLM(pl.LightningModule):
                       prog_bar=True)
 
         return metrics
+
 
     def test_step(self, batch, batch_idx):
         loss, acc = self._shared_eval_step(batch, batch_idx)
@@ -144,6 +168,7 @@ class SSLM(pl.LightningModule):
         
         return metrics
 
+
     def _shared_eval_step(self, batch, batch_idx):
         x,y = batch
         y_hat, _ = self.model(x)
@@ -151,10 +176,12 @@ class SSLM(pl.LightningModule):
         acc = accuracy(y_hat, y)
         return loss, acc
 
+
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         x, y = batch
         y_hat, _ = self.model(x)
         return y_hat
+
 
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(self.model.parameters(), self.lr, momentum=0.9, weight_decay=0.00003)
@@ -181,3 +208,17 @@ class MetricTracker(pl.Callback):
     self.log_metrics['train']['loss'].append(elogs['train_loss'].item())
     self.log_metrics['val']['accuracy'].append(elogs['val_accuracy'].item())
     self.log_metrics['val']['loss'].append(elogs['val_loss'].item())
+
+
+class GDE():
+    def __init__(self) -> None:
+        pass
+        
+    def fit(self, embeddings):
+            self.kde = KernelDensity().fit(embeddings)
+        
+        
+    def predict(self, embeddings):
+        scores = self.kde.score_samples(embeddings)
+        norm = np.linalg.norm(scores)
+        return scores/norm

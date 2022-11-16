@@ -93,7 +93,8 @@ if __name__ == "__main__":
     }
     experiments = [
         #('screw', '3-way', 'generative_dataset'),
-        ('toothbrush', '3-way', 'generative_dataset')
+        #('toothbrush', '3-way', 'generative_dataset')
+        ('bottle', '3-way', 'generative_dataset')
     ]
     pbar = tqdm(range(len(experiments)))
     for i in pbar:
