@@ -17,7 +17,13 @@ def inference_pipeline(
         dataset_type_gen:str='generative_dataset',
         args:dict=None):
     
-    
+    if classification_task == '3-way':
+        labels = [0,1,2]
+        number_colors = 3
+    else:
+        labels = [0,1]
+        number_colors = 2
+        
     imsize = args['imsize']
     batch_size = args['batch_size']
     seed = args['seed']
@@ -25,8 +31,9 @@ def inference_pipeline(
     results_dir = outputs_dir+subject+'/'+dataset_type_gen+'/'+classification_task+'/'
     model_dir = results_dir+'/best_model.ckpt'
     dataset_dir = root_dir+subject+'/'
-    sslm = SSLM('3-way')
+    sslm = SSLM(classification_task)
     sslm = SSLM.load_from_checkpoint(model_dir, model=sslm.model)
+    
     print('')
     print('>>> Generating test dataset (artificial)')
     start = time.time()
@@ -53,10 +60,11 @@ def inference_pipeline(
     y_hat = y_hat.indices
     
     print('>>> Printing report')
+    
     result = classification_report( 
             y,
             y_hat,
-            labels=[0,1,2],
+            labels=labels,
             output_dict=True
         )
     df = pd.DataFrame.from_dict(result)
@@ -77,7 +85,7 @@ def inference_pipeline(
     sns.scatterplot(hue=df.labels.tolist(),
                     x='comp-1',
                     y='comp-2',
-                    palette=sns.color_palette("hls", 3),
+                    palette=sns.color_palette("hls", number_colors),
                     data=df).set(title='Embeddings projection ('+subject+', '+classification_task+')') 
     plt.savefig(results_dir+'/tsne.png')
 
