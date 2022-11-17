@@ -1,12 +1,15 @@
 import numpy as np
+from torchvision import transforms
 
 
+# options
 def DATASET_GENERATION_TYPES():
     return np.array(['generative_dataset', 'classic_dataset'])
 
 
 def CLASSIFICATION_TASK_TYPES():
     return np.array(['3-way', 'binary'])
+
 
 # dataset constants
 def DEFAULT_CLASSIFICATION_TASK():
@@ -19,6 +22,11 @@ def DEFAULT_DATASET_GENERATION():
 
 def DEFAULT_IMSIZE():
     return (256,256)
+
+
+def DEFAULT_NUM_WORKERS():
+    return 8
+
 
 # default model parameters
 def DEFAULT_BATCH_SIZE():
@@ -39,4 +47,15 @@ def DEFAULT_EPOCHS():
 
 def DEFAULT_TRAIN_VAL_SPLIT():
     return 0.2
+
+
+def DEFAULT_PROJECTION_HEAD_DIMS():
+    return np.array([512,512,512,512,512,512,512,512,128])
+
+
+def DEFAULT_TRANSFORMS():
+    return transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+        ])
 

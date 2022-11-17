@@ -7,21 +7,24 @@ from torchmetrics.functional import accuracy
 import random
 import numpy as np
 from sklearn.neighbors import KernelDensity
-
+import self_supervised.support.constants as CONST
+from numpy import array
+from torch import Tensor
 
 
 class SSLModel(nn.Module):
     def __init__(self, 
-                num_classes,
-                seed=0,
-                dims = [512,512,512,512,512,512,512,512,128]):
+                num_classes:int,
+                seed:int=CONST.DEFAULT_SEED(),
+                dims:array = CONST.DEFAULT_PROJECTION_HEAD_DIMS()):
+        
         super().__init__()
         self.seed = seed
         self.num_classes = num_classes
         self.localization = False
 
-        self.feature_extractor = self.setup_default_feature_extractor()
-        self.projection_head = self.setup_default_projection_head(dims)
+        self.feature_extractor = self.setup_feature_extractor()
+        self.projection_head = self.setup_projection_head(dims)
         self.classifier = nn.Linear(128, self.num_classes)
         
         self.gradients = None
@@ -30,7 +33,7 @@ class SSLModel(nn.Module):
         torch.random.manual_seed(seed)
 
     
-    def setup_default_projection_head(self, dims):
+    def setup_projection_head(self, dims):
         proj_layers = []
         for d in dims[:-1]:
             proj_layers.append(nn.Linear(d,d, bias=False)),
@@ -45,7 +48,7 @@ class SSLModel(nn.Module):
         return projection_head
     
     
-    def setup_default_feature_extractor(self):
+    def setup_feature_extractor(self):
         fe = getattr(models, 'resnet18')(weights="IMAGENET1K_V1")
         last_layer= list(fe.named_modules())[-1][0].split('.')[0]
         setattr(fe, last_layer, nn.Identity())
@@ -107,15 +110,15 @@ class SSLModel(nn.Module):
 class SSLM(pl.LightningModule):
     def __init__(
             self,
-            task:str='binary',
-            lr=0.001,
-            seed=0):
+            classification_task:str=CONST.DEFAULT_CLASSIFICATION_TASK,
+            lr:float=CONST.DEFAULT_LEARNING_RATE(),
+            seed:int=CONST.DEFAULT_SEED()):
+        
         super(SSLM, self).__init__()
-
         self.save_hyperparameters()
         self.lr = lr
-        self.task = task
-        self.num_classes = 3 if task == '3-way' else 2
+        self.classification_task = classification_task
+        self.num_classes = 3 if classification_task== '3-way' else 2
         self.seed = seed
 
         random.seed(seed)
@@ -214,11 +217,11 @@ class GDE():
     def __init__(self) -> None:
         pass
         
-    def fit(self, embeddings):
+    def fit(self, embeddings:Tensor):
             self.kde = KernelDensity().fit(embeddings)
         
         
-    def predict(self, embeddings):
+    def predict(self, embeddings:Tensor):
         scores = self.kde.score_samples(embeddings)
         norm = np.linalg.norm(scores)
         return scores/norm

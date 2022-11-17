@@ -3,18 +3,19 @@ from self_supervised.model import SSLM, MetricTracker
 from self_supervised.support.visualization import plot_history
 import pytorch_lightning as pl
 from self_supervised.support.cutpaste_parameters import CPP
+import self_supervised.support.constants as CONST
 from tqdm import tqdm
 import os
 
 
 def run_pipeline(
-        dataset_dir, 
-        results_dir, 
-        subject, 
-        classification_task='binary', 
-        dataset_type_generation='classic_dataset',
-        args=None):
-    #print('subject:', subject.upper())
+        dataset_dir:str, 
+        results_dir:str, 
+        subject:str, 
+        classification_task:str=CONST.DEFAULT_CLASSIFICATION_TASK(), 
+        dataset_type_generation:str=CONST.DATASET_GENERATION_TYPES(),
+        args:dict=None):
+
     print('classification task:', classification_task.upper())
     print('dataset type generation:', dataset_type_generation.upper())
     
@@ -76,7 +77,7 @@ if __name__ == "__main__":
     dataset_dir = '/home/ubuntu/TesiAnomalyDetection/dataset/'
     results_dir = '/home/ubuntu/TesiAnomalyDetection/outputs/computations/'
     
-    imsize=(256,256)
+    imsize= (256,256)
     batch_size = 64
     train_val_split = 0.2
     seed = 0

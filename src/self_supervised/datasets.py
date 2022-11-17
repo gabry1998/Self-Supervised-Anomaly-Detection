@@ -1,24 +1,28 @@
 import numpy as np
 import pytorch_lightning as pl
+import support.constants as CONST
 from PIL import Image
 from sklearn.model_selection import train_test_split as tts
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
+from torchvision.transforms import Compose
 from .support.dataset_generator import *
 from .support.cutpaste_parameters import CPP
 from .support.functional import *
+from numpy import array
 from numpy.random import permutation
 
 # dataset per le vere immagini mvtec
 class MVTecDataset(Dataset):
     def __init__(
             self,
-            dataset_dir,
-            subject,
-            images_filenames,
-            imsize=(256,256),
-            transform=None,
-            mode='test') -> None:
+            dataset_dir:str,
+            subject:str,
+            images_filenames:array,
+            imsize:tuple=CONST.DEFAULT_IMSIZE(),
+            transform:Compose=None,
+            mode:str='test') -> None:
+        
         super().__init__()
         self.dataset_dir = dataset_dir
         self.subject = subject
@@ -58,11 +62,11 @@ class MVTecDataset(Dataset):
 class MVTecDatamodule(pl.LightningDataModule):
     def __init__(
             self,
-            root_dir, #qualcosa come ../dataset/bottle/
-            subject,
-            imsize,
-            batch_size:int=64,  
-            seed=0):
+            root_dir:str, # something as ../dataset/bottle/
+            subject:str,
+            imsize:tuple=CONST.DEFAULT_IMSIZE(),
+            batch_size:int=CONST.DEFAULT_BATCH_SIZE(),  
+            seed:int=CONST.DEFAULT_SEED()):
             
         super().__init__()
         self.root_dir = root_dir
@@ -71,13 +75,11 @@ class MVTecDatamodule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.seed = seed
         
-        self.transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
-        ])
+        self.transform = CONST.DEFAULT_TRANSFORMS()
         
         self.train_images_filenames = get_image_filenames(self.root_dir+'/train/good/')
         self.test_images_filenames = get_mvtec_test_images(self.root_dir+'/test/')
+    
     
     def setup(self, stage=None) -> None:
         self.train_dataset = MVTecDataset(
@@ -95,27 +97,30 @@ class MVTecDatamodule(pl.LightningDataModule):
             mode='test'
         )
     
+    
     def train_dataloader(self):
         return DataLoader(
             self.train_dataset, 
             batch_size=self.batch_size, 
             shuffle=True,
-            num_workers=8)
+            num_workers=CONST.DEFAULT_NUM_WORKERS())
+    
     
     def test_dataloader(self):
         return DataLoader(
             self.test_dataset, 
             batch_size=self.batch_size, 
             shuffle=True,
-            num_workers=8)
+            num_workers=CONST.DEFAULT_NUM_WORKERS())
  
+
 # avanti con questo tipo di dataset
 class GenerativeDataset(Dataset):
     def __init__(
             self, 
-            task,
-            images_filenames,
-            imsize=(256,256),
+            classification_task:str,
+            images_filenames:array,
+            imsize=CONST.DEFAULT_IMSIZE(),
             transform=None) -> None:
 
         super().__init__()
@@ -126,35 +131,39 @@ class GenerativeDataset(Dataset):
         self.scar_thiccness = CPP.cutpaste_augmentations['scar']['thiccness']
         
         self.imsize = imsize
-        self.task=task
+        self.classification_task = classification_task
         self.transform = transform
         
         self.labels = self.generate_labels()
-    
+   
+ 
     def generate_labels(self):
         length = self.images_filenames.shape[0]
-        if self.task == '3-way':
+        if self.classification_task == '3-way':
             return np.array(np.random.uniform(0,3, length), dtype=int)
-        if self.task == 'binary':
+        if self.classification_task == 'binary':
             return np.array(np.random.uniform(0,2, length), dtype=int)
         else:
             return np.empty(0)
+
 
     def __getitem__(self, index):
         x = self.images_filenames[index]
         y = self.labels[index]
 
-        if self.task == '3-way':
+        if self.classification_task == '3-way':
             x = self.generate_cutpaste_3way(x, y)
-        if self.task == 'binary':
+        if self.classification_task == 'binary':
             x = self.generate_cutpaste_binary(x, y)
         
         if self.transform:
             x = self.transform(x)
         return x, y
     
+    
     def __len__(self):
         return self.images_filenames.shape[0]
+    
     
     def generate_cutpaste_3way(self, x, y):
         x = Image.open(x).resize(self.imsize).convert('RGB')
@@ -170,6 +179,7 @@ class GenerativeDataset(Dataset):
             patch, coords = generate_scar(x.size, self.scar_width, self.scar_thiccness)
             x = paste_patch(x, patch, coords, patch)
             return x
+
 
     def generate_cutpaste_binary(self, x, y):
         x = Image.open(x).resize(self.imsize).convert('RGB')
@@ -192,12 +202,12 @@ class GenerativeDatamodule(pl.LightningDataModule):
     def __init__(
             self, 
             root_dir:str, #qualcosa come ../dataset/bottle/
-            imsize=(256,256),
-            batch_size:int=64,  
-            train_val_split:float=0.2,
-            classification_task='binary',
-            seed:int=0,
-            min_dataset_length=1000,
+            imsize:tuple=CONST.DEFAULT_IMSIZE(),
+            batch_size:int=CONST.DEFAULT_BATCH_SIZE(),  
+            train_val_split:float=CONST.DEFAULT_TRAIN_VAL_SPLIT,
+            classification_task:str=CONST.DEFAULT_CLASSIFICATION_TASK(),
+            seed:int=CONST.DEFAULT_SEED(),
+            min_dataset_length:int=1000,
             duplication=False):
         
         super().__init__()
@@ -213,12 +223,10 @@ class GenerativeDatamodule(pl.LightningDataModule):
         self.min_dataset_length = min_dataset_length
         self.duplication = duplication
 
-        self.transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
-        ])
+        self.transform = CONST.DEFAULT_TRANSFORMS()
         
         self.prepare_filenames()
+
 
     def prepare_filenames(self):
         images_filenames = get_image_filenames(self.root_dir_train)
@@ -245,8 +253,10 @@ class GenerativeDatamodule(pl.LightningDataModule):
             self.val_images_filenames = val_images_filenames
             self.test_images_filenames = test_images_filenames
     
+    
     def prepare_data(self) -> None:
         pass
+    
     
     def setup(self, stage:str=None) -> None:
         if stage == 'fit' or stage is None:
@@ -263,6 +273,7 @@ class GenerativeDatamodule(pl.LightningDataModule):
                 imsize=self.imsize,
                 transform=self.transform)
 
+
     def train_dataloader(self):
         self.train_dataset = GenerativeDataset(
                 self.classification_task,
@@ -275,7 +286,8 @@ class GenerativeDatamodule(pl.LightningDataModule):
             batch_size=self.batch_size, 
             shuffle=False,
             drop_last=True,
-            num_workers=8)
+            num_workers=CONST.DEFAULT_NUM_WORKERS())
+
 
     def val_dataloader(self):
         return DataLoader(
@@ -283,14 +295,16 @@ class GenerativeDatamodule(pl.LightningDataModule):
             batch_size=self.batch_size, 
             shuffle=False,
             drop_last=True,
-            num_workers=8)
+            num_workers=CONST.DEFAULT_NUM_WORKERS())
+    
     
     def test_dataloader(self):
         return DataLoader(
             self.test_dataset, 
             batch_size=self.batch_size, 
             shuffle=False,
-            num_workers=8)
+            num_workers=CONST.DEFAULT_NUM_WORKERS())
+
 
 # roba vecchia da rivedere
 class CutPasteClassicDataset(Dataset):

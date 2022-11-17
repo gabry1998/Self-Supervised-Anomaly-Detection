@@ -7,14 +7,15 @@ from sklearn.manifold import TSNE
 import seaborn as sns
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import self_supervised.support.constants as CONST
 
 
 def inference_pipeline(
         root_dir:str,
         outputs_dir:str,
         subject:str,
-        classification_task:str='3-way',
-        dataset_type_gen:str='generative_dataset',
+        classification_task:str=CONST.DEFAULT_CLASSIFICATION_TASK(),
+        dataset_type_gen:str=CONST.DEFAULT_DATASET_GENERATION(),
         args:dict=None):
     
     if classification_task == '3-way':
