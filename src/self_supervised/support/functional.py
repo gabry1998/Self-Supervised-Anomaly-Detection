@@ -18,12 +18,12 @@ def ground_truth(filename:str=None, imsize=(256,256)):
 
 
 def get_image_filenames(main_path:str):
-    return np.array(sorted([f for f in glob.glob(main_path+'*.png', recursive = True)]))
+    return np.array(sorted([f.replace("\\", '/') for f in glob.glob(main_path+'*.png', recursive = True)]))
 
 
 def get_mvtec_anomaly_classes(main_path:str):
     return np.array([name for name in os.listdir(main_path) if os.path.isdir(
-                        os.path.join(main_path, name))
+                        main_path+'/'+name)
                     ])
 
 

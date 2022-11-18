@@ -1,6 +1,6 @@
 import numpy as np
 import pytorch_lightning as pl
-import support.constants as CONST
+from .support import constants as CONST
 from PIL import Image
 from sklearn.model_selection import train_test_split as tts
 from torch.utils.data import DataLoader, Dataset
@@ -38,8 +38,7 @@ class MVTecDataset(Dataset):
             
             gt_filename = get_mvtec_gt_filename_counterpart(
                 filename,
-                self.dataset_dir+'/ground_truth/')
-            
+                self.dataset_dir+'ground_truth/')
             gt = ground_truth(gt_filename, self.imsize)
             
             if self.transform:
@@ -75,7 +74,8 @@ class MVTecDatamodule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.seed = seed
         
-        self.transform = CONST.DEFAULT_TRANSFORMS()
+        self.transform = transforms.Compose([
+            transforms.ToTensor()])
         
         self.train_images_filenames = get_image_filenames(self.root_dir+'/train/good/')
         self.test_images_filenames = get_mvtec_test_images(self.root_dir+'/test/')
@@ -103,7 +103,7 @@ class MVTecDatamodule(pl.LightningDataModule):
             self.train_dataset, 
             batch_size=self.batch_size, 
             shuffle=True,
-            num_workers=CONST.DEFAULT_NUM_WORKERS())
+            num_workers=4)
     
     
     def test_dataloader(self):
@@ -111,7 +111,7 @@ class MVTecDatamodule(pl.LightningDataModule):
             self.test_dataset, 
             batch_size=self.batch_size, 
             shuffle=True,
-            num_workers=CONST.DEFAULT_NUM_WORKERS())
+            num_workers=4)
  
 
 # avanti con questo tipo di dataset

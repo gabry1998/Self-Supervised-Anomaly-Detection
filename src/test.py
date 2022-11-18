@@ -16,9 +16,12 @@ from torchvision import transforms
 import glob
 import pandas as pd
 import math
-from sklearn.metrics import roc_curve, auc
 import cv2
 
+
+def test0():
+    x = get_image_filenames('dataset/bottle/train/good/')
+    print(x[0])
 
 
 def test1():
@@ -39,8 +42,8 @@ def test1():
 
 
 def test2():
-    dataset_dir = '/home/ubuntu/TesiAnomalyDetection/dataset/'
-    subject = 'toothbrush'
+    dataset_dir = 'dataset/'
+    subject = 'bottle'
     
     y = get_mvtec_anomaly_classes(dataset_dir+subject+'/test/')
     print(y)
@@ -52,7 +55,7 @@ def test2():
     
     print(y_hat1)
     print(y_hat2)
- 
+
     
 def test3():
     print(CPP.summary)
@@ -369,5 +372,15 @@ def test9():
     
     out = torch.stack((y1,y2,y3)).permute(1,0,2,3)
     print(out.shape)
+    
+def test10():
+    sslm = SSLM.load_from_checkpoint('outputs/computations/bottle/generative_dataset/3-way/best_model.ckpt')
 
-test8()
+def test11():
+  x = torch.tensor([[-2.6766,  2.6247, -0.3351],
+        [-3.6310,  2.8119,  0.4878],
+        [-0.1757, -1.6140,  2.1292]])
+  
+  print(x.argmax(dim=1))
+  
+test11()

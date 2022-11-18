@@ -8,7 +8,7 @@ from tqdm import tqdm
 import os
 
 
-def run_pipeline(
+def training_pipeline(
         dataset_dir:str, 
         results_dir:str, 
         subject:str, 
@@ -100,7 +100,7 @@ if __name__ == "__main__":
     pbar = tqdm(range(len(experiments)))
     for i in pbar:
         pbar.set_description('Pipeline Execution | current subject is '+experiments[i][0].upper())
-        run_pipeline(
+        training_pipeline(
             dataset_dir, 
             results_dir, 
             experiments[i][0], 

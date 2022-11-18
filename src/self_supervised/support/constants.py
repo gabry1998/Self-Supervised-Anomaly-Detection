@@ -11,6 +11,10 @@ def CLASSIFICATION_TASK_TYPES():
     return np.array(['3-way', 'binary'])
 
 
+def DEFAULT_CHECKPOINT_MODEL_NAME():
+    return 'best_model.ckpt'
+
+
 # dataset constants
 def DEFAULT_CLASSIFICATION_TASK():
     return CLASSIFICATION_TASK_TYPES()[0]

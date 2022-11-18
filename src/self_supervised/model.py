@@ -110,7 +110,7 @@ class SSLModel(nn.Module):
 class SSLM(pl.LightningModule):
     def __init__(
             self,
-            classification_task:str=CONST.DEFAULT_CLASSIFICATION_TASK,
+            classification_task:str=CONST.DEFAULT_CLASSIFICATION_TASK(),
             lr:float=CONST.DEFAULT_LEARNING_RATE(),
             seed:int=CONST.DEFAULT_SEED()):
         
