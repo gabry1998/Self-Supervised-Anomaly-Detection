@@ -2,11 +2,17 @@ import os
 import self_supervised.support.constants as CONST
 import self_supervised.datasets as dt
 import self_supervised.model as md
+from PIL import Image
 import torch
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import cv2
+from self_supervised.support.functional import ModelLocalizerWrapper, SimilarityToConceptTarget
+from pytorch_grad_cam.utils.image import show_cam_on_image
+from pytorch_grad_cam import GradCAM
+from torchvision import transforms
+import random
 
 def localization_pipeline(
         dataset_dir:str, 
@@ -29,73 +35,60 @@ def localization_pipeline(
     )
     datamodule.setup()
     x, y = next(iter(datamodule.train_dataloader()))
-    if torch.cuda.is_available():
-        x = x.to('cuda')
     
     print('>>> preparing model')
     sslm = md.SSLM.load_from_checkpoint(
-        results_dir+subject+'/'+dataset_type_generation+\
+        results_dir+'computations/'+subject+'/'+dataset_type_generation+\
         '/'+classification_task+'/'+CONST.DEFAULT_CHECKPOINT_MODEL_NAME())
-    if torch.cuda.is_available():
-        sslm.to('cuda')
-    
     sslm.eval()
-    sslm.model.set_for_localization(True)
+    sslm.set_for_localization(True)
+    localizer = ModelLocalizerWrapper(sslm.model)
+    
+    print('>>> getting image reference features')
+    #reference = x[0]
+    #x_ref = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(reference)
+    
+    defect_type = 'good'
+    reference = Image.open('dataset/'+subject+'/test/'+defect_type+'/000.png').resize(imsize).convert('RGB')
+    x_ref = transforms.ToTensor()(reference)
+    x_ref = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(x_ref)
+    
+    localizer.to('cpu')
+    
+    concept_features = localizer(x_ref[None, :])[0, :]
+    
+    #x1, y1 = next(iter(datamodule.test_dataloader()))
+    j = len(datamodule.test_dataset)
+    
+    for i in tqdm(range(20)):
+        
+        query, _ = datamodule.test_dataset[random.randint(0, j)]
+        x_query = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(query)
+        
+        my_target_layers = [sslm.model.feature_extractor.layer4[-1]]
+        my_targets = [SimilarityToConceptTarget(concept_features)]
+        with GradCAM(model=localizer,
+                    target_layers=my_target_layers,
+                    use_cuda=False) as cam1:
 
-    for i in tqdm(range(5)):
-        print('')
-        img = x[i]
-        print('>>> computing features')
-        avg_pool, layer1, layer2, layer3, layer4 = sslm.model.compute_features(img[None, :])
-        print('>>> making predictions')
-        predictions, _ = sslm(img[None, :])
-        y_hat = torch.argmax(predictions).item()
-        print(y_hat)
-        predictions[:, y_hat].backward()
-        g = sslm.model.gradients
-        print(layer4.shape)
-        for j in range(512):
-            layer4[0, j, :, :] *= g[0][j]
-        layer4 = layer4.detach()
-        heatmap = torch.mean(layer4, dim=1).squeeze()
-        heatmap = np.maximum(heatmap, 0)
-        
-        
-        heatmap = heatmap / torch.max(heatmap)
-        heatmap = heatmap.numpy()
-        
-        if y_hat == 0:
-            figtitle = 'good'
-        else:  
-            figtitle = 'defect'
-        
-        #print(heatmap.shape)
-        plt.title(figtitle)
-        plt.imshow(heatmap)
-        plt.savefig('outputs/localization/bottle/features/'+str(i)+'.png')
+            grayscale_cam = cam1(input_tensor=x_query[None, :],
+                                targets=my_targets)
+            
+        my_grayscale_cam = grayscale_cam[0,:]
 
-        #gs = GaussianSmooth()
-        #heatmap = gs.upsample(np.array(torch.tensor(heatmap)[None, :]))
-        #print(heatmap.shape)
-        #heatmap = heatmap[0]
-        img = np.array(torch.permute(img, (2,1,0)))
-        img = np.uint8(255 * img)
-        heatmap = cv2.resize(heatmap, CONST.DEFAULT_IMSIZE())
-        heatmap = np.uint8(255 * heatmap)
-        heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
-        superimposed_img = heatmap * 0.3 + img
-        superimposed_img = np.uint8(255 * superimposed_img / np.max(superimposed_img))
-        superimposed_img = cv2.cvtColor(superimposed_img, cv2.COLOR_BGR2RGB)
-        plt.title(figtitle)
-        plt.imshow(superimposed_img)
-        plt.savefig('outputs/localization/bottle/gradcam/'+str(i)+'.png')
-        
+        my_image_float = np.array(torch.permute(query, (2,1,0)))
+        #my_image_float = np.float32(my_image_float) / 255
+        cam_image = show_cam_on_image(my_image_float, my_grayscale_cam, use_rgb=True)
+        plt.imshow(cam_image)
+        plt.savefig(results_dir+'localization/'+subject+'/gradcam/'+str(i)+'.png')
+        plt.close()
+
         
         os.system('clear')
         
 if __name__ == "__main__":
     dataset_dir = 'dataset/'
-    results_dir = 'outputs/computations/'
+    results_dir = 'outputs/'
     localization_pipeline(
         dataset_dir=dataset_dir,
         results_dir=results_dir,

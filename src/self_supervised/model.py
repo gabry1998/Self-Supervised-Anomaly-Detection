@@ -21,13 +21,12 @@ class SSLModel(nn.Module):
         super().__init__()
         self.seed = seed
         self.num_classes = num_classes
-        self.localization = False
-
+        
         self.feature_extractor = self.setup_feature_extractor()
         self.projection_head = self.setup_projection_head(dims)
         self.classifier = nn.Linear(128, self.num_classes)
         
-        self.gradients = None
+        self.localization = False
         random.seed(seed)
         np.random.seed(seed)
         torch.random.manual_seed(seed)
@@ -61,14 +60,11 @@ class SSLModel(nn.Module):
         return fe
     
     
-    def get_activations_gradient(self):
-        return self.gradients
-    
-    
-    def set_for_localization(self, p=False):
-        if p:
-            for param in self.feature_extractor.parameters():
-                param.requires_grad = True
+    def set_for_localization(self, p=True):
+        for param in self.feature_extractor.parameters():
+            param.requires_grad = p
+        for param in self.projection_head.parameters():
+            param.requires_grad = p
         self.localization = p
     
         
@@ -92,18 +88,11 @@ class SSLModel(nn.Module):
     def forward(self, x):
         x = x.float()
         features = self.feature_extractor(x)
-        
-        hooker = features
-        
-        if self.localization:
-            def __extract_grad(grad):
-                self.gradients = grad
-            hooker.register_hook(__extract_grad)
-        
-        
         features = torch.flatten(features, 1)
         embeddings = self.projection_head(features)
         output = self.classifier(embeddings)
+        if self.localization:
+            return output
         return (output, embeddings)
 
 
@@ -126,12 +115,21 @@ class SSLM(pl.LightningModule):
         torch.random.manual_seed(seed)
         
         self.model = SSLModel(self.num_classes)
-
+        self.localization = False
+    
+    
+    def set_for_localization(self, p=True):
+        self.model.set_for_localization(p)
+        self.localization = p
+    
     
     def forward(self, x):
+        if self.localization:
+            output = self.model(x)
+            return  output
+        
         output, embeddings = self.model(x)
         return  output, embeddings
-    
     
     def training_step(self, batch, batch_idx):    
         x, y = batch
@@ -223,5 +221,5 @@ class GDE():
         
     def predict(self, embeddings:Tensor):
         scores = self.kde.score_samples(embeddings)
-        norm = np.linalg.norm(scores)
-        return scores/norm
+        norm = np.linalg.norm(-scores)
+        return -(scores/norm)

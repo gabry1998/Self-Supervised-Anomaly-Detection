@@ -4,8 +4,6 @@ import torch
 import os
 from PIL import Image
 from torch import Tensor
-import matplotlib.pyplot as plt
-from sklearn.metrics import roc_curve, auc
 from scipy import signal
 
 
@@ -76,26 +74,6 @@ def extract_patches(image:Tensor, dim=64, stride=32):
     return patches
 
 
-def plot_roc(labels:Tensor, scores:Tensor, subject:str):
-    fpr, tpr, _ = roc_curve(labels, scores)
-    roc_auc = auc(fpr, tpr)
-
-    #plot roc
-    plt.figure()
-    lw = 2
-    plt.plot(fpr, tpr, color='darkorange',
-            lw=lw, label='ROC curve (area = %0.2f)' % roc_auc)
-    plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
-    plt.title('Roc curve ['+subject+']')
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.legend(loc="lower right")
-    plt.savefig('test_roc.png')
-    plt.close()
-
-
 class GaussianSmooth:
     def __init__(self, kernel_size=32, stride=4, std=None, device=None):
         self.kernel_size = kernel_size
@@ -130,3 +108,23 @@ class GaussianSmooth:
         X = torch.from_numpy(X).float().to(self.device)
         out = tconv(X).detach().cpu().numpy()
         return out
+    
+
+class SimilarityToConceptTarget:
+    def __init__(self, features):
+        self.features = features
+    
+    def __call__(self, model_output):
+        cos = torch.nn.CosineSimilarity(dim=0)
+        return 1-cos(model_output, self.features)
+    
+
+class ModelLocalizerWrapper(torch.nn.Module):
+    def __init__(self, model):
+        super(ModelLocalizerWrapper, self).__init__()
+        self.model = model
+        self.feature_extractor = torch.nn.Sequential(*list(self.model.children())[:-1])
+                
+    def __call__(self, x):
+        y = self.feature_extractor(x)
+        return y
