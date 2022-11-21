@@ -11,6 +11,7 @@ mvtec/
 dataset/
 lightning_logs/
 src/test.py
+best_model.ckpt
 
 
 # Distribution / packaging
