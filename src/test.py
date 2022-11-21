@@ -135,9 +135,6 @@ def test_GDE_image_level():
     
     plot_roc(test_labels, scores, 'bottle')
 
-test_GDE_image_level()
-
-
 def test_1d_to_2d():
     x = torch.randn((1,10))
 
@@ -146,3 +143,15 @@ def test_1d_to_2d():
     x1 = np.resize(np.array(x), (int(np.sqrt(x.shape[1])), int(np.sqrt(x.shape[1]))))
     print(x1.shape)
     print(x1)
+
+
+def test_cat():
+    x = []
+    x.append(torch.randn((1,3,256,256)))
+    x.append(torch.randn((1,3,256,256)))
+    x.append(torch.randn((1,3,256,256)))
+    
+    y = torch.cat(x)
+    print(y.shape)
+
+test_cat()

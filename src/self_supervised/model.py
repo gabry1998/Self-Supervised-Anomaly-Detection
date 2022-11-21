@@ -60,6 +60,13 @@ class SSLModel(nn.Module):
         return fe
     
     
+    def unfreeze_layers(self, p=True):
+        for param in self.feature_extractor.parameters():
+            param.requires_grad = p
+        for param in self.projection_head.parameters():
+            param.requires_grad = p
+    
+    
     def set_for_localization(self, p=True):
         for param in self.feature_extractor.parameters():
             param.requires_grad = p
@@ -116,6 +123,10 @@ class SSLM(pl.LightningModule):
         
         self.model = SSLModel(self.num_classes)
         self.localization = False
+    
+    
+    def unfreeze_layers(self, p=True):
+        self.model.unfreeze_layers(p)
     
     
     def set_for_localization(self, p=True):

@@ -14,26 +14,25 @@ def inference_pipeline(
         root_dir:str,
         outputs_dir:str,
         subject:str,
-        classification_task:str=CONST.DEFAULT_CLASSIFICATION_TASK(),
-        dataset_type_gen:str=CONST.DEFAULT_DATASET_GENERATION(),
         args:dict=None):
     
-    if classification_task == '3-way':
-        labels = [0,1,2]
-        number_colors = 3
+    if torch.cuda.is_available():
+        cuda_available = True
     else:
-        labels = [0,1]
-        number_colors = 2
+        cuda_available = False
         
     imsize = args['imsize']
     batch_size = args['batch_size']
     seed = args['seed']
     
-    results_dir = outputs_dir+subject+'/'+dataset_type_gen+'/'+classification_task+'/'
+    results_dir = outputs_dir+subject
     model_dir = results_dir+'/best_model.ckpt'
     dataset_dir = root_dir+subject+'/'
     sslm = SSLM(classification_task)
     sslm = SSLM.load_from_checkpoint(model_dir, model=sslm.model)
+    
+    if cuda_available:
+        sslm.to('cuda')
     
     print('')
     print('>>> Generating test dataset (artificial)')
@@ -55,8 +54,15 @@ def inference_pipeline(
     
     print('>>> Inferencing...')
     x,y = next(iter(datamodule.test_dataloader())) 
-    y_hat, embeddings = sslm(x)
-
+    if cuda_available:
+        x = x.to('cuda')
+        y_hat, embeddings = sslm(x)
+        y_hat = y_hat.to('cpu')
+        embeddings = embeddings.to('cpu')
+    else:
+        x = x.to('cpu')
+        y_hat, embeddings = sslm(x)
+        
     y_hat = torch.max(y_hat.data, 1)
     y_hat = y_hat.indices
     
@@ -87,13 +93,13 @@ def inference_pipeline(
                     x='comp-1',
                     y='comp-2',
                     palette=sns.color_palette("hls", number_colors),
-                    data=df).set(title='Embeddings projection ('+subject+', '+classification_task+')') 
+                    data=df).set(title='Embeddings projection ('+subject+')') 
     plt.savefig(results_dir+'/tsne.png')
 
 
 if __name__ == "__main__":
     dataset_dir = 'dataset/'
-    results_dir = 'outputs/computations/' 
+    results_dir = 'outputs/temp/' 
     imsize=(256,256)
     batch_size = 64
     seed = 0
@@ -105,11 +111,8 @@ if __name__ == "__main__":
     }
     
     experiments = [
-        ('bottle', '3-way', 'generative_dataset'),
-        #('grid', '3-way', 'generative_dataset'),
-        #('screw', '3-way', 'generative_dataset'),
-        #('tile', '3-way', 'generative_dataset'),
-        #('toothbrush', '3-way', 'generative_dataset')
+        'bottle',
+        #'grid'
     ]
     
     pbar = tqdm(range(len(experiments)))
@@ -118,8 +121,6 @@ if __name__ == "__main__":
         inference_pipeline(
             dataset_dir, 
             results_dir, 
-            experiments[i][0], 
-            experiments[i][1], 
-            experiments[i][2],
+            experiments[i][0],
             args)
         os.system('clear')

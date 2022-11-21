@@ -1,11 +1,11 @@
 import numpy as np
 import pytorch_lightning as pl
-from .support import constants as CONST
 from PIL import Image
 from sklearn.model_selection import train_test_split as tts
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 from torchvision.transforms import Compose
+from .support import constants as CONST
 from .support.dataset_generator import *
 from .support.cutpaste_parameters import CPP
 from .support.functional import *
@@ -204,7 +204,7 @@ class GenerativeDatamodule(pl.LightningDataModule):
             root_dir:str, #qualcosa come ../dataset/bottle/
             imsize:tuple=CONST.DEFAULT_IMSIZE(),
             batch_size:int=CONST.DEFAULT_BATCH_SIZE(),  
-            train_val_split:float=CONST.DEFAULT_TRAIN_VAL_SPLIT,
+            train_val_split:float=CONST.DEFAULT_TRAIN_VAL_SPLIT(),
             classification_task:str=CONST.DEFAULT_CLASSIFICATION_TASK(),
             seed:int=CONST.DEFAULT_SEED(),
             min_dataset_length:int=1000,

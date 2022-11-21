@@ -22,6 +22,9 @@ def training_pipeline(
     result_path = results_dir+subject+'/'+dataset_type_generation+'/'+classification_task+'/'
     checkpoint_name = 'best_model.ckpt'
     
+    if not os.path.exists(result_path):
+            os.makedirs(result_path)
+    
     print('result dir:', result_path)
     print('checkpoint name:', checkpoint_name)
     
@@ -65,24 +68,38 @@ def training_pipeline(
         max_epochs=epochs, 
         check_val_every_n_epoch=1,
         reload_dataloaders_every_n_epochs=10)
-    print('>>> start training')
+    print('>>> start training (training projection head)')
     trainer.fit(pretext_model, datamodule=datamodule)
-    trainer.save_checkpoint(result_path+checkpoint_name)
     
     print('>>> training plot')
-    plot_history(cb.log_metrics, epochs, result_path, classification_task)
+    plot_history(cb.log_metrics, epochs, result_path)
     
+    print('>>> start training (fine tune whole net)')
+    pretext_model.lr = 0.00005
+    cb = MetricTracker()
+    trainer = pl.Trainer(
+        callbacks= [cb],
+        accelerator='auto', 
+        devices=1, 
+        max_epochs=10, 
+        check_val_every_n_epoch=1,
+        reload_dataloaders_every_n_epochs=10)
+    pretext_model.unfreeze_layers(True)
+    trainer.fit(pretext_model, datamodule=datamodule)
+    trainer.save_checkpoint(result_path+checkpoint_name)
+    print('>>> training plot')
+    plot_history(cb.log_metrics, 10, result_path, 'fine_tune')
 
 if __name__ == "__main__":
-    dataset_dir = '/home/ubuntu/TesiAnomalyDetection/dataset/'
-    results_dir = '/home/ubuntu/TesiAnomalyDetection/outputs/computations/'
+    dataset_dir = 'dataset/'
+    results_dir = 'outputs/temp/'
     
     imsize= (256,256)
     batch_size = 64
     train_val_split = 0.2
     seed = 0
     lr = 0.001
-    epochs = 30
+    epochs = 20
     
     args = {
         'imsize': imsize,
