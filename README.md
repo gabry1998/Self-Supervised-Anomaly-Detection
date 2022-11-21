@@ -74,7 +74,6 @@ All images have size (256,256) and are randomly rotated from a selection of [0, 
 | |  |
 | :-----: | :-----: |
 | Batch size | 64 |
-| train-validation split | 0.2 |
 | seed | 0 |
 | Backbone | ResNet-18 |
 | Pretrained | Yes (Imagenet Weights) |
@@ -83,15 +82,28 @@ All images have size (256,256) and are randomly rotated from a selection of [0, 
 | learning rate | 0.001 |
 | Momentum | 0.9 |
 | Weight decay rate | 0.00003 |
-| epochs | 30 |
+| epochs (backbone frozen) | 30 |
+| epochs (including backbone) | 20 |
 
-### Training Examples
+### Computation Examples
 
-| Bottle ccuracy| Bottle loss |
+#### Object (BOTTLES)
+| bottle example |
+| :--: |
+|![alt text](https://github.com/gabry1998/Self-Supervised-Anomaly-Detection/tree/main/readme_images/bottle.png) |
+
+| t-SNE | ROC |
 | :--: | :--: |
-| ![alt text](https://github.com/gabry1998/TesiAnomalyDetection/blob/main/readme_images/bottle_accuracy.png) | ![alt text](https://github.com/gabry1998/TesiAnomalyDetection/blob/main/readme_images/bottle_loss.png) |
+| ![alt text](https://github.com/gabry1998/Self-Supervised-Anomaly-Detection/blob/main/outputs/computations/bottle/tsne.png) | ![alt text](https://github.com/gabry1998/Self-Supervised-Anomaly-Detection/blob/main/outputs/computations/bottle/roc.png) |
+
+#### Texture (GRID)
+| grid example |
+| :--: |
+|![alt text](https://github.com/gabry1998/Self-Supervised-Anomaly-Detection/tree/main/readme_images/grid.png) |
 
 | Grid ccuracy| Grid loss |
 | :--: | :--: |
-| ![alt text](https://github.com/gabry1998/TesiAnomalyDetection/blob/main/readme_images/accuracy.png) | ![alt text](https://github.com/gabry1998/TesiAnomalyDetection/blob/main/readme_images/loss.png) |
+| ![alt text](https://github.com/gabry1998/Self-Supervised-Anomaly-Detection/blob/main/outputs/computations/grid/tsne.png) | ![alt text](https://github.com/gabry1998/Self-Supervised-Anomaly-Detection/blob/main/outputs/computations/grid/roc.png) |
 
+#### Explanation
+Textures defects are very hard to identify because of homogeneous patterns. Still, in the example we have an almost perfect scenario in BOTTLES, thanks to (assuming) easy object recognition in the images and his defects (real and artificial). In GRID we can see scars (2) isolated from the rest of classes, thanks to peculiarity of that defect (its literally a colored line over a homogeneous image). To improve Texture defect recognition we can apply more image augmentation, for example contrast, brightness, sharpening, etc to emphatize more the defect over the whole image and give the model a easier job.
