@@ -55,7 +55,7 @@ def localization_pipeline(
     
     localizer.to('cpu')
     
-    concept_features = localizer(x_ref[None, :])[0, :]
+    
     
     #x1, y1 = next(iter(datamodule.test_dataloader()))
     j = len(datamodule.test_dataset)
@@ -65,6 +65,7 @@ def localization_pipeline(
         query, _ = datamodule.test_dataset[random.randint(0, j)]
         x_query = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(query)
         
+        concept_features = localizer(x_ref[None, :])[0, :]
         my_target_layers = [sslm.model.feature_extractor.layer4[-1]]
         my_targets = [SimilarityToConceptTarget(concept_features)]
         with GradCAM(model=localizer,
