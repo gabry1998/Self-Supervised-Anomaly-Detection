@@ -106,15 +106,13 @@ class SSLModel(nn.Module):
 class SSLM(pl.LightningModule):
     def __init__(
             self,
-            classification_task:str=CONST.DEFAULT_CLASSIFICATION_TASK(),
             lr:float=CONST.DEFAULT_LEARNING_RATE(),
             seed:int=CONST.DEFAULT_SEED()):
         
         super(SSLM, self).__init__()
         self.save_hyperparameters()
         self.lr = lr
-        self.classification_task = classification_task
-        self.num_classes = 3 if classification_task== '3-way' else 2
+        self.num_classes = 3
         self.seed = seed
 
         random.seed(seed)

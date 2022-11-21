@@ -11,15 +11,10 @@ import os
 def training_pipeline(
         dataset_dir:str, 
         results_dir:str, 
-        subject:str, 
-        classification_task:str=CONST.DEFAULT_CLASSIFICATION_TASK(), 
-        dataset_type_generation:str=CONST.DATASET_GENERATION_TYPES(),
+        subject:str,
         args:dict=None):
-
-    print('classification task:', classification_task.upper())
-    print('dataset type generation:', dataset_type_generation.upper())
     
-    result_path = results_dir+subject+'/'+dataset_type_generation+'/'+classification_task+'/'
+    result_path = results_dir+subject+'/'
     checkpoint_name = 'best_model.ckpt'
     
     if not os.path.exists(result_path):
@@ -37,29 +32,18 @@ def training_pipeline(
     
     
     print('>>> preparing datamodule')
-    if dataset_type_generation == 'generative_dataset':
-        datamodule = GenerativeDatamodule(
-            dataset_dir+subject+'/',
-            imsize=imsize,
-            batch_size=batch_size,
-            train_val_split=train_val_split,
-            seed=seed,
-            classification_task=classification_task,
-            duplication=True
-        )
-    else:
-        datamodule = CutPasteClassicDatamodule(
-            dataset_dir+subject+'/',
-            imsize=imsize,
-            batch_size=batch_size,
-            train_val_split=train_val_split,
-            classification_task=classification_task,
-            seed=seed,
-            duplication=True
-        )
+    datamodule = GenerativeDatamodule(
+        dataset_dir+subject+'/',
+        imsize=imsize,
+        batch_size=batch_size,
+        train_val_split=train_val_split,
+        seed=seed,
+        duplication=True
+    )
+
     
     print('>>> setting up the model')
-    pretext_model = SSLM(classification_task, lr=lr, seed=seed)
+    pretext_model = SSLM(lr=lr, seed=seed)
     cb = MetricTracker()
     trainer = pl.Trainer(
         callbacks= [cb],
@@ -81,25 +65,25 @@ def training_pipeline(
         callbacks= [cb],
         accelerator='auto', 
         devices=1, 
-        max_epochs=10, 
+        max_epochs=20, 
         check_val_every_n_epoch=1,
         reload_dataloaders_every_n_epochs=10)
     pretext_model.unfreeze_layers(True)
     trainer.fit(pretext_model, datamodule=datamodule)
     trainer.save_checkpoint(result_path+checkpoint_name)
     print('>>> training plot')
-    plot_history(cb.log_metrics, 10, result_path, 'fine_tune')
+    plot_history(cb.log_metrics, 20, result_path, 'fine_tune')
 
 if __name__ == "__main__":
     dataset_dir = 'dataset/'
-    results_dir = 'outputs/temp/'
+    results_dir = 'outputs/computations/'
     
     imsize= (256,256)
     batch_size = 64
     train_val_split = 0.2
     seed = 0
     lr = 0.001
-    epochs = 20
+    epochs = 30
     
     args = {
         'imsize': imsize,
@@ -110,19 +94,15 @@ if __name__ == "__main__":
         'epochs': epochs
     }
     experiments = [
-        #('screw', '3-way', 'generative_dataset'),
-        #('toothbrush', '3-way', 'generative_dataset')
-        ('bottle', '3-way', 'generative_dataset')
+        'grid'
     ]
     pbar = tqdm(range(len(experiments)))
     for i in pbar:
-        pbar.set_description('Pipeline Execution | current subject is '+experiments[i][0].upper())
+        pbar.set_description('Pipeline Execution | current subject is '+experiments[i].upper())
         training_pipeline(
             dataset_dir, 
             results_dir, 
-            experiments[i][0], 
-            experiments[i][1], 
-            experiments[i][2],
+            experiments[i],
             args)
         os.system('clear')
         

@@ -23,7 +23,7 @@ def plot_history(network_history, epochs, saving_path='', mode='training'):
     plt.show()
 
 
-def plot_roc(labels:Tensor, scores:Tensor, subject:str):
+def plot_roc(labels:Tensor, scores:Tensor, subject:str, saving_path:str):
     fpr, tpr, _ = roc_curve(labels, scores)
     roc_auc = auc(fpr, tpr)
 
@@ -39,7 +39,7 @@ def plot_roc(labels:Tensor, scores:Tensor, subject:str):
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
     plt.legend(loc="lower right")
-    plt.savefig('test_roc.png')
+    plt.savefig(saving_path)
     plt.close()
 
 

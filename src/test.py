@@ -153,5 +153,28 @@ def test_cat():
     
     y = torch.cat(x)
     print(y.shape)
-
-test_cat()
+    
+def test_cat2():
+    x = []
+    x.append(torch.tensor(0))
+    x.append(torch.tensor(1))
+    x.append(torch.tensor(2))
+    
+    y = torch.tensor(np.array(x))
+    print(y)
+    
+    a = torch.tensor(3)
+    y = y.tolist()
+    y.append(a)
+    y = torch.tensor(np.array(y))
+    print(y)
+    
+def test_cat3():
+    y_hat = torch.randn(3,1,128)
+    print(y_hat.shape)
+    
+    y_hat2 = torch.randn(6,1,128)
+    
+    y = torch.cat([y_hat, y_hat2])
+    print(y.shape)
+test_cat3()

@@ -21,7 +21,8 @@ class MVTecDataset(Dataset):
             images_filenames:array,
             imsize:tuple=CONST.DEFAULT_IMSIZE(),
             transform:Compose=None,
-            mode:str='test') -> None:
+            mode:str='test'
+            ) -> None:
         
         super().__init__()
         self.dataset_dir = dataset_dir
@@ -74,8 +75,9 @@ class MVTecDatamodule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.seed = seed
         
-        self.transform = transforms.Compose([
-            transforms.ToTensor()])
+        self.transform = CONST.DEFAULT_TRANSFORMS()
+        #self.transform = transforms.Compose([
+        #    transforms.ToTensor()])
         
         self.train_images_filenames = get_image_filenames(self.root_dir+'/train/good/')
         self.test_images_filenames = get_mvtec_test_images(self.root_dir+'/test/')
@@ -117,8 +119,7 @@ class MVTecDatamodule(pl.LightningDataModule):
 # avanti con questo tipo di dataset
 class GenerativeDataset(Dataset):
     def __init__(
-            self, 
-            classification_task:str,
+            self,
             images_filenames:array,
             imsize=CONST.DEFAULT_IMSIZE(),
             transform=None) -> None:
@@ -131,7 +132,6 @@ class GenerativeDataset(Dataset):
         self.scar_thiccness = CPP.cutpaste_augmentations['scar']['thiccness']
         
         self.imsize = imsize
-        self.classification_task = classification_task
         self.transform = transform
         
         self.labels = self.generate_labels()
@@ -139,22 +139,13 @@ class GenerativeDataset(Dataset):
  
     def generate_labels(self):
         length = self.images_filenames.shape[0]
-        if self.classification_task == '3-way':
-            return np.array(np.random.uniform(0,3, length), dtype=int)
-        if self.classification_task == 'binary':
-            return np.array(np.random.uniform(0,2, length), dtype=int)
-        else:
-            return np.empty(0)
+        return np.array(np.random.uniform(0,3, length), dtype=int)
 
 
     def __getitem__(self, index):
         x = self.images_filenames[index]
         y = self.labels[index]
-
-        if self.classification_task == '3-way':
-            x = self.generate_cutpaste_3way(x, y)
-        if self.classification_task == 'binary':
-            x = self.generate_cutpaste_binary(x, y)
+        x = self.generate_cutpaste_3way(x, y)
         
         if self.transform:
             x = self.transform(x)
@@ -181,23 +172,6 @@ class GenerativeDataset(Dataset):
             return x
 
 
-    def generate_cutpaste_binary(self, x, y):
-        x = Image.open(x).resize(self.imsize).convert('RGB')
-        x = generate_rotation(x)
-        if y == 0:
-            return x
-        else:
-            if random.randint(0,1) == 1:
-                patch, coords = generate_patch(x, self.area_ratio, self.aspect_ratio)
-                patch = apply_jittering(patch, CPP.jitter_transforms)
-                x = paste_patch(x, patch, coords)
-                return x
-            else:
-                patch, coords = generate_scar(x.size, self.scar_width, self.scar_thiccness)
-                x = paste_patch(x, patch, coords, patch)
-                return x
-
-
 class GenerativeDatamodule(pl.LightningDataModule):
     def __init__(
             self, 
@@ -205,7 +179,6 @@ class GenerativeDatamodule(pl.LightningDataModule):
             imsize:tuple=CONST.DEFAULT_IMSIZE(),
             batch_size:int=CONST.DEFAULT_BATCH_SIZE(),  
             train_val_split:float=CONST.DEFAULT_TRAIN_VAL_SPLIT(),
-            classification_task:str=CONST.DEFAULT_CLASSIFICATION_TASK(),
             seed:int=CONST.DEFAULT_SEED(),
             min_dataset_length:int=1000,
             duplication=False):
@@ -217,7 +190,6 @@ class GenerativeDatamodule(pl.LightningDataModule):
         self.imsize = imsize
         self.batch_size = batch_size
         self.train_val_split = train_val_split
-        self.classification_task = classification_task
         
         self.seed = seed
         self.min_dataset_length = min_dataset_length
@@ -261,14 +233,12 @@ class GenerativeDatamodule(pl.LightningDataModule):
     def setup(self, stage:str=None) -> None:
         if stage == 'fit' or stage is None:
             self.val_dataset = GenerativeDataset(
-                self.classification_task,
                 self.val_images_filenames,
                 imsize=self.imsize,
                 transform=self.transform)
             
         if stage == 'test' or stage is None:
             self.test_dataset = GenerativeDataset(
-                self.classification_task,
                 self.test_images_filenames,
                 imsize=self.imsize,
                 transform=self.transform)
@@ -276,7 +246,6 @@ class GenerativeDatamodule(pl.LightningDataModule):
 
     def train_dataloader(self):
         self.train_dataset = GenerativeDataset(
-                self.classification_task,
                 self.train_images_filenames,
                 imsize=self.imsize,
                 transform=self.transform)
