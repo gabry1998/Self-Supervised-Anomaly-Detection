@@ -88,9 +88,10 @@ All images have size (256,256) and are randomly rotated from a selection of [0, 
 ### Computation Examples
 
 #### Object (BOTTLES)
+
 | bottle example |
 | :--: |
-|![alt text](https://github.com/gabry1998/Self-Supervised-Anomaly-Detection/tree/main/readme_images/bottle.png) |
+| <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/readme_images/bottle.png" width="256" height="256"/> |
 
 | t-SNE | ROC |
 | :--: | :--: |
@@ -99,7 +100,7 @@ All images have size (256,256) and are randomly rotated from a selection of [0, 
 #### Texture (GRID)
 | grid example |
 | :--: |
-|![alt text](https://github.com/gabry1998/Self-Supervised-Anomaly-Detection/tree/main/readme_images/grid.png) |
+|<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/readme_images/grid.png" width="256" height="256"/> |
 
 | Grid ccuracy| Grid loss |
 | :--: | :--: |
