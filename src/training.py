@@ -94,7 +94,7 @@ if __name__ == "__main__":
         'epochs': epochs
     }
     experiments = [
-        'grid'
+        'bottle'
     ]
     pbar = tqdm(range(len(experiments)))
     for i in pbar:
