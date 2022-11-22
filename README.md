@@ -95,16 +95,16 @@ All images have size (256,256) and are randomly rotated from a selection of [0, 
 
 | t-SNE | ROC |
 | :--: | :--: |
-| ![alt text](https://github.com/gabry1998/Self-Supervised-Anomaly-Detection/blob/main/outputs/computations/bottle/tsne.png) | ![alt text](https://github.com/gabry1998/Self-Supervised-Anomaly-Detection/blob/main/outputs/computations/bottle/roc.png) |
+| <img src="https://github.com/gabry1998/Self-Supervised-Anomaly-Detection/blob/main/outputs/computations/bottle/tsne.png"/> | <img src="https://github.com/gabry1998/Self-Supervised-Anomaly-Detection/blob/main/outputs/computations/bottle/roc.png"/>|
 
 #### Texture (GRID)
 | grid example |
 | :--: |
 |<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/readme_images/grid.png" width="256" height="256"/> |
 
-| Grid ccuracy| Grid loss |
+|t-SNE| ROC |
 | :--: | :--: |
-| ![alt text](https://github.com/gabry1998/Self-Supervised-Anomaly-Detection/blob/main/outputs/computations/grid/tsne.png) | ![alt text](https://github.com/gabry1998/Self-Supervised-Anomaly-Detection/blob/main/outputs/computations/grid/roc.png) |
+| <img src="https://github.com/gabry1998/Self-Supervised-Anomaly-Detection/blob/main/outputs/computations/grid/tsne.png"/> | <img src="https://github.com/gabry1998/Self-Supervised-Anomaly-Detection/blob/main/outputs/computations/grid/roc.png"/> |
 
 #### Explanation
 Textures defects are very hard to identify because of homogeneous patterns. Still, in the example we have an almost perfect scenario in BOTTLES, thanks to (assuming) easy object recognition in the images and his defects (real and artificial). In GRID we can see scars (2) isolated from the rest of classes, thanks to peculiarity of that defect (its literally a colored line over a homogeneous image). To improve Texture defect recognition we can apply more image augmentation, for example contrast, brightness, sharpening, etc to emphatize more the defect over the whole image and give the model a easier job.
