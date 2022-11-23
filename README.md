@@ -54,19 +54,9 @@ Those augmentations are only applied to the artificial anomalies (cutpaste patch
 The images labeled as '0' are augmentation-free. <br />
 All images have size (256,256) and are randomly rotated from a selection of [0, 90, 180, 270] degrees.
 
-### CutPaste Examples
+### CutPaste Approach Example
 
-| Good |
-| :--: |
-| ![alt text](https://github.com/gabry1998/TesiAnomalyDetection/blob/main/readme_images/good.png) |
-
-| CutPaste |
-| :--: |
-| ![alt text](https://github.com/gabry1998/TesiAnomalyDetection/blob/main/readme_images/cutpaste.png) |
-
-| Scar |
-| :--: |
-| ![alt text](https://github.com/gabry1998/TesiAnomalyDetection/blob/main/readme_images/scar.png) |
+<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/dataset_analysis/screw/screw_artificial.png"/>
 
 ### Network parameters
 
@@ -95,7 +85,7 @@ All images have size (256,256) and are randomly rotated from a selection of [0, 
 
 | t-SNE | ROC |
 | :--: | :--: |
-| <img src="https://github.com/gabry1998/Self-Supervised-Anomaly-Detection/blob/main/outputs/computations/bottle/tsne.png"/> | <img src="https://github.com/gabry1998/Self-Supervised-Anomaly-Detection/blob/main/outputs/computations/bottle/roc.png"/>|
+| <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/bottle/tsne.png"/> | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/bottle/roc.png"/>|
 
 #### Texture (GRID)
 | grid example |
@@ -104,7 +94,7 @@ All images have size (256,256) and are randomly rotated from a selection of [0, 
 
 |t-SNE| ROC |
 | :--: | :--: |
-| <img src="https://github.com/gabry1998/Self-Supervised-Anomaly-Detection/blob/main/outputs/computations/grid/tsne.png"/> | <img src="https://github.com/gabry1998/Self-Supervised-Anomaly-Detection/blob/main/outputs/computations/grid/roc.png"/> |
+| <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/grid/tsne.png"/> | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/grid/roc.png"/> |
 
 #### Explanation
 Textures defects are very hard to identify because of homogeneous patterns. Still, in the example we have an almost perfect scenario in BOTTLES, thanks to (assuming) easy object recognition in the images and his defects (real and artificial). In GRID we can see scars (2) isolated from the rest of classes, thanks to peculiarity of that defect (its literally a colored line over a homogeneous image). To improve Texture defect recognition we can apply more image augmentation, for example contrast, brightness, sharpening, etc to emphatize more the defect over the whole image and give the model a easier job.
