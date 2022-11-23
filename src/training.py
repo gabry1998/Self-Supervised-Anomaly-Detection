@@ -6,6 +6,7 @@ from self_supervised.support.cutpaste_parameters import CPP
 import self_supervised.support.constants as CONST
 from tqdm import tqdm
 import os
+import sys
 
 
 def training_pipeline(
@@ -57,7 +58,6 @@ def training_pipeline(
     
     print('>>> training plot')
     plot_history(cb.log_metrics, epochs, result_path)
-    
     print('>>> start training (fine tune whole net)')
     pretext_model.lr = 0.00005
     cb = MetricTracker()
@@ -94,7 +94,11 @@ if __name__ == "__main__":
         'epochs': epochs
     }
     experiments = [
-        'bottle'
+        'bottle',
+        'grid',
+        'screw',
+        'tile',
+        'toothbrush'
     ]
     pbar = tqdm(range(len(experiments)))
     for i in pbar:
