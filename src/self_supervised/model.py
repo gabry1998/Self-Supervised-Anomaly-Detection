@@ -15,11 +15,12 @@ from torch import Tensor
 class SSLModel(nn.Module):
     def __init__(self, 
                 num_classes:int,
-                seed:int=CONST.DEFAULT_SEED(),
+                num_epochs:int,
                 dims:array = CONST.DEFAULT_PROJECTION_HEAD_DIMS()):
         
         super().__init__()
-        self.seed = seed
+        #self.seed = seed
+        self.num_epochs = num_epochs
         self.num_classes = num_classes
         
         self.feature_extractor = self.setup_feature_extractor()
@@ -27,9 +28,9 @@ class SSLModel(nn.Module):
         self.classifier = nn.Linear(128, self.num_classes)
         
         self.localization = False
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.random.manual_seed(seed)
+        #random.seed(seed)
+        #np.random.seed(seed)
+        #torch.random.manual_seed(seed)
 
     
     def setup_projection_head(self, dims):
@@ -57,6 +58,8 @@ class SSLModel(nn.Module):
             param.requires_grad = False
 
         fe.fc = nn.Identity()
+        for param in fe.fc.parameters():
+            param.requires_grad = True
         return fe
     
     
@@ -106,20 +109,21 @@ class SSLModel(nn.Module):
 class SSLM(pl.LightningModule):
     def __init__(
             self,
-            lr:float=CONST.DEFAULT_LEARNING_RATE(),
-            seed:int=CONST.DEFAULT_SEED()):
+            num_epochs:int=None,
+            lr:float=CONST.DEFAULT_LEARNING_RATE()):
         
         super(SSLM, self).__init__()
         self.save_hyperparameters()
         self.lr = lr
         self.num_classes = 3
-        self.seed = seed
+        self.num_epochs = num_epochs
+        #self.seed = seed
 
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.random.manual_seed(seed)
+        #random.seed(seed)
+        #np.random.seed(seed)
+        #torch.random.manual_seed(seed)
         
-        self.model = SSLModel(self.num_classes)
+        self.model = SSLModel(self.num_classes, self.num_epochs)
         self.localization = False
     
     
@@ -195,7 +199,8 @@ class SSLM(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(self.model.parameters(), self.lr, momentum=0.9, weight_decay=0.00003)
-        return optimizer
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, self.num_epochs)
+        return [optimizer], [scheduler]
 
 
 class MetricTracker(pl.Callback):

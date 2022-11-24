@@ -44,7 +44,7 @@ def training_pipeline(
 
     
     print('>>> setting up the model')
-    pretext_model = SSLM(lr=lr, seed=seed)
+    pretext_model = SSLM(num_epochs=epochs, lr=lr)
     cb = MetricTracker()
     trainer = pl.Trainer(
         callbacks= [cb],
@@ -60,6 +60,9 @@ def training_pipeline(
     plot_history(cb.log_metrics, epochs, result_path)
     print('>>> start training (fine tune whole net)')
     pretext_model.lr = 0.00005
+    pretext_model.model.lr = 0.00005
+    pretext_model.num_epochs = 20
+    pretext_model.model.num_epochs = 20
     cb = MetricTracker()
     trainer = pl.Trainer(
         callbacks= [cb],
@@ -79,7 +82,7 @@ if __name__ == "__main__":
     results_dir = 'outputs/computations/'
     
     imsize= (256,256)
-    batch_size = 64
+    batch_size = 96
     train_val_split = 0.2
     seed = 0
     lr = 0.001
@@ -94,11 +97,7 @@ if __name__ == "__main__":
         'epochs': epochs
     }
     experiments = [
-        'bottle',
-        'grid',
         'screw',
-        'tile',
-        'toothbrush'
     ]
     pbar = tqdm(range(len(experiments)))
     for i in pbar:
