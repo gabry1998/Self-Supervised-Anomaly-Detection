@@ -66,7 +66,8 @@ class MVTecDatamodule(pl.LightningDataModule):
             subject:str,
             imsize:tuple=CONST.DEFAULT_IMSIZE(),
             batch_size:int=CONST.DEFAULT_BATCH_SIZE(),  
-            seed:int=CONST.DEFAULT_SEED()):
+            seed:int=CONST.DEFAULT_SEED(),
+            localization=False):
             
         super().__init__()
         self.root_dir = root_dir
@@ -74,10 +75,13 @@ class MVTecDatamodule(pl.LightningDataModule):
         self.imsize = imsize
         self.batch_size = batch_size
         self.seed = seed
+        self.localization = localization
         
-        self.transform = CONST.DEFAULT_TRANSFORMS()
-        #self.transform = transforms.Compose([
-        #    transforms.ToTensor()])
+        if localization:
+            self.transform = transforms.Compose([
+                transforms.ToTensor()])
+        else:
+            self.transform = CONST.DEFAULT_TRANSFORMS()
         
         self.train_images_filenames = get_image_filenames(self.root_dir+'/train/good/')
         self.test_images_filenames = get_mvtec_test_images(self.root_dir+'/test/')

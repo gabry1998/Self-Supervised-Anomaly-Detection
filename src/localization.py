@@ -19,9 +19,7 @@ import random
 def localization_pipeline(
         dataset_dir:str, 
         results_dir:str, 
-        subject:str,
-        dataset_type_generation:str=CONST.DEFAULT_DATASET_GENERATION(),
-        classification_task:str=CONST.DEFAULT_CLASSIFICATION_TASK()):
+        subject:str):
     
     imsize = CONST.DEFAULT_IMSIZE()
     batch_size = CONST.DEFAULT_BATCH_SIZE()
@@ -33,21 +31,20 @@ def localization_pipeline(
         subject=subject,
         imsize=imsize,
         batch_size=batch_size,
-        seed=seed
+        seed=seed,
+        localization=True
     )
     datamodule.setup()
     x, y = next(iter(datamodule.train_dataloader()))
     
     print('>>> preparing model')
     sslm = md.SSLM.load_from_checkpoint(
-        results_dir+subject+'/'+dataset_type_generation+\
-        '/'+classification_task+'/'+CONST.DEFAULT_CHECKPOINT_MODEL_NAME())
+        results_dir+subject+'/'+CONST.DEFAULT_CHECKPOINT_MODEL_NAME())
     sslm.eval()
     sslm.set_for_localization(True)
     localizer = ModelLocalizerWrapper(sslm.model)
     
-    clone = md.SSLM.load_from_checkpoint(results_dir+subject+'/'+dataset_type_generation+\
-        '/'+classification_task+'/'+CONST.DEFAULT_CHECKPOINT_MODEL_NAME())
+    clone = md.SSLM.load_from_checkpoint(results_dir+subject+'/'+CONST.DEFAULT_CHECKPOINT_MODEL_NAME())
     clone.eval()
     
     references = []
@@ -57,7 +54,7 @@ def localization_pipeline(
     patch = apply_jittering(patch, CPP.jitter_transforms)
     defect_reference = paste_patch(good_reference, patch, coords)
     defect_im = transforms.ToTensor()(defect_reference)
-    defect_im = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(defect_im)
+    #defect_im = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(defect_im)
     references.append(defect_im[None, :])
     
     references = torch.cat(references)
@@ -66,7 +63,7 @@ def localization_pipeline(
     my_target_layers = [sslm.model.feature_extractor.layer4[-1]]
     defect_reference_target = [SimilarityToConceptTarget(concept_features[0])]
 
-    j = len(datamodule.test_dataset)
+    j = len(datamodule.test_dataset)-1
     for i in tqdm(range(5), desc='Getting image reference features'):
         query, _ = datamodule.test_dataset[random.randint(0, j)]
         x_query = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(query)
@@ -87,7 +84,7 @@ def localization_pipeline(
             
         
         my_image_float = np.array(torch.permute(query, (2,1,0)))
-        cam_image = show_cam_on_image(my_image_float, my_grayscale_cam, use_rgb=True)
+        cam_image = show_cam_on_image(my_image_float, np.array(my_grayscale_cam), use_rgb=True)
         
         images = [my_image_float, np.float32(cam_image) / 255]
         output = np.hstack(images)
@@ -104,12 +101,10 @@ def localization_pipeline(
         
 if __name__ == "__main__":
     dataset_dir = 'dataset/'
-    results_dir = 'outputs/temp/'
+    results_dir = 'outputs/computations/'
     localization_pipeline(
         dataset_dir=dataset_dir,
         results_dir=results_dir,
-        subject='bottle',
-        dataset_type_generation='generative_dataset',
-        classification_task='3-way'
+        subject='bottle'
     )
     
