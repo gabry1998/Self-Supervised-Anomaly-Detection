@@ -253,7 +253,7 @@ class GenerativeDatamodule(pl.LightningDataModule):
         return DataLoader(
             self.train_dataset, 
             batch_size=self.batch_size, 
-            shuffle=False,
+            shuffle=True,
             drop_last=True,
             num_workers=CONST.DEFAULT_NUM_WORKERS())
 

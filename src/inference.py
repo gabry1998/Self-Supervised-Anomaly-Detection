@@ -182,11 +182,7 @@ if __name__ == "__main__":
     }
     
     experiments = [
-        'bottle',
-        'grid',
-        'screw',
-        'tile',
-        'toothbrush'
+        'screw'
     ]
     
     pbar = tqdm(range(len(experiments)))
