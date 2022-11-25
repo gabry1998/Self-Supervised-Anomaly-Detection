@@ -50,11 +50,11 @@ def localization_pipeline(
     references = []
     defect_type = 'good'
     good_reference = Image.open('dataset/'+subject+'/train/'+defect_type+'/000.png').resize(imsize).convert('RGB')
-    patch, coords = generate_patch(good_reference)
-    patch = apply_jittering(patch, CPP.jitter_transforms)
-    defect_reference = paste_patch(good_reference, patch, coords)
-    defect_im = transforms.ToTensor()(defect_reference)
-    #defect_im = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(defect_im)
+    #patch, coords = generate_patch(good_reference)
+    #patch = apply_jittering(patch, CPP.jitter_transforms)
+    #defect_reference = paste_patch(good_reference, patch, coords)
+    defect_im = transforms.ToTensor()(good_reference)
+    defect_im = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(defect_im)
     references.append(defect_im[None, :])
     
     references = torch.cat(references)

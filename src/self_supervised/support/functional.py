@@ -116,7 +116,7 @@ class SimilarityToConceptTarget:
     
     def __call__(self, model_output):
         cos = torch.nn.CosineSimilarity(dim=0)
-        return cos(model_output, self.features)
+        return 1-cos(model_output, self.features)
     
 
 class ModelLocalizerWrapper(torch.nn.Module):
