@@ -170,7 +170,7 @@ def inference_pipeline(
 
 if __name__ == "__main__":
     dataset_dir = 'dataset/'
-    results_dir = 'outputs/computations/' 
+    results_dir = 'temp/computations/' 
     imsize=(256,256)
     batch_size = 128
     seed = 0
@@ -182,7 +182,11 @@ if __name__ == "__main__":
     }
     
     experiments = [
-        'screw'
+        'bottle',
+        'grid',
+        'screw',
+        'tile',
+        'toothbrush'
     ]
     
     pbar = tqdm(range(len(experiments)))

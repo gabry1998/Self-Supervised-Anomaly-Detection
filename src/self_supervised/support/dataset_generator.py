@@ -1,9 +1,40 @@
 import random
-from PIL import Image, ImageFilter
+from PIL import Image, ImageFilter, ImageOps
 import numpy as np
 from .cutpaste_parameters import CPP
 from .functional import get_image_filenames, duplicate_filenames
 import time
+
+
+
+class Deformer:
+    def __init__(self, img_size, area_ratio=(0.02, 0.15), aspect_ratio=((0.3, 1),(1, 3.3))) -> None:
+        self.img_size = img_size
+
+        img_area = self.img_size[0] * self.img_size[1]
+        patch_area = random.uniform(area_ratio[0], area_ratio[1]) * img_area
+        patch_aspect = random.choice([random.uniform(*aspect_ratio[0]), random.uniform(*aspect_ratio[1])])
+        patch_w  = int(np.sqrt(patch_area*patch_aspect))
+        patch_h = int(np.sqrt(patch_area/patch_aspect))
+        org_w, org_h = self.img_size
+        self.crop_left, self.crop_top = random.randint(25, (org_w - patch_w)-25), random.randint(25, (org_h - patch_h)-25)
+        self.crop_right, self.crop_bottom = self.crop_left + patch_w, self.crop_top + patch_h
+        self.paste_left, self.paste_top = random.randint(25, (org_w - patch_w)-25), random.randint(25, (org_h - patch_h)-25)
+    def getmesh(self, img):
+        return [(
+                # target rectangle
+                (self.crop_left, self.crop_top,self.crop_right, self.crop_bottom),
+                # corresponding source quadrilateral
+                (np.random.randint(25,200), 
+                 np.random.randint(25,200),
+                 np.random.randint(25,200),
+                 np.random.randint(25,200),
+                 np.random.randint(25,200),
+                 np.random.randint(25,200),
+                 np.random.randint(25,200),
+                 np.random.randint(25,200))
+                )]
+
 
 def generate_rotations(image):
     r90 = image.rotate(90)
@@ -16,6 +47,17 @@ def generate_rotation(image):
     rotation = random.choice([0, 90, 180, 270])
     return image.rotate(rotation)
 
+
+def generate_patch_distorted(
+        image, 
+        area_ratio=(0.02, 0.15),
+        aspect_ratio=((0.3, 1),(1, 3.3))):
+    sd = Deformer(
+        image.size, 
+        area_ratio, 
+        aspect_ratio)
+    deformed = ImageOps.deform(image, sd)
+    return deformed.crop((sd.crop_left, sd.crop_top, sd.crop_right, sd.crop_bottom)), (sd.paste_left, sd.paste_top)
 
 def generate_patch(
         image, 

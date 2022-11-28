@@ -79,7 +79,7 @@ def training_pipeline(
 
 if __name__ == "__main__":
     dataset_dir = 'dataset/'
-    results_dir = 'outputs/computations/'
+    results_dir = 'temp/computations/'
     
     imsize= (256,256)
     batch_size = 96
@@ -97,7 +97,11 @@ if __name__ == "__main__":
         'epochs': epochs
     }
     experiments = [
+        'bottle',
+        'grid',
         'screw',
+        'tile',
+        'toothbrush'
     ]
     pbar = tqdm(range(len(experiments)))
     for i in pbar:

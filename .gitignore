@@ -10,6 +10,7 @@ __pycache__/
 mvtec/
 dataset/
 lightning_logs/
+temp/
 src/test.py
 best_model.ckpt
 

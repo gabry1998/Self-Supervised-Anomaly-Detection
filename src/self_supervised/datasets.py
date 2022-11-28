@@ -126,7 +126,8 @@ class GenerativeDataset(Dataset):
             self,
             images_filenames:array,
             imsize=CONST.DEFAULT_IMSIZE(),
-            transform=None) -> None:
+            transform=None,
+            distortion=True) -> None:
 
         super().__init__()
         self.images_filenames = images_filenames
@@ -138,8 +139,10 @@ class GenerativeDataset(Dataset):
         self.imsize = imsize
         self.transform = transform
         
+        self.distortion = distortion
+        
         self.labels = self.generate_labels()
-   
+
  
     def generate_labels(self):
         length = self.images_filenames.shape[0]
@@ -166,7 +169,10 @@ class GenerativeDataset(Dataset):
         if y == 0:
             return x
         if y == 1:
-            patch, coords = generate_patch(x, self.area_ratio, self.aspect_ratio)
+            if self.distortion:
+                patch, coords = generate_patch_distorted(x, self.area_ratio, self.aspect_ratio)
+            else:
+                patch, coords = generate_patch(x, self.area_ratio, self.aspect_ratio)
             patch = apply_jittering(patch, CPP.jitter_transforms)
             x = paste_patch(x, patch, coords)
             return x

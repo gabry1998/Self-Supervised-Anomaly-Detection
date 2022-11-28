@@ -12,7 +12,7 @@ from self_supervised.support.cutpaste_parameters import CPP
 from self_supervised.support.dataset_generator import apply_jittering, generate_patch, paste_patch
 from self_supervised.support.functional import ModelLocalizerWrapper, SimilarityToConceptTarget
 from pytorch_grad_cam.utils.image import show_cam_on_image
-from pytorch_grad_cam import GradCAM
+from pytorch_grad_cam import GradCAM, EigenCAM
 from torchvision import transforms
 import random
 
@@ -72,7 +72,7 @@ def localization_pipeline(
         y_hat = torch.max(y_hat.data, 1)
         y_hat = int(y_hat.indices)
         my_grayscale_cam = None
-        with GradCAM(model=localizer,
+        with EigenCAM(model=localizer,
                     target_layers=my_target_layers,
                     use_cuda=False) as cam1:
             if y_hat == 0:
@@ -101,7 +101,7 @@ def localization_pipeline(
         
 if __name__ == "__main__":
     dataset_dir = 'dataset/'
-    results_dir = 'outputs/computations/'
+    results_dir = 'temp/computations/'
     localization_pipeline(
         dataset_dir=dataset_dir,
         results_dir=results_dir,
