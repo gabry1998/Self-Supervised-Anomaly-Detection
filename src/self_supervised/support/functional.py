@@ -5,7 +5,7 @@ import os
 from PIL import Image
 from torch import Tensor
 from scipy import signal
-
+import torch.nn.functional as F
 
 
 def ground_truth(filename:str=None, imsize=(256,256)):
@@ -109,22 +109,146 @@ class GaussianSmooth:
         out = tconv(X).detach().cpu().numpy()
         return out
     
-
-class SimilarityToConceptTarget:
-    def __init__(self, features):
-        self.features = features
     
-    def __call__(self, model_output):
-        cos = torch.nn.CosineSimilarity(dim=0)
-        return 1-cos(model_output, self.features)
-    
+class BaseCAM(object):
+    def __init__(self, model_dict):
+        model_type = model_dict['type']
+        layer_name = model_dict['layer_name']
+        
+        self.model_arch = model_dict['arch']
+        self.model_arch.eval()
+        if torch.cuda.is_available():
+          self.model_arch.cuda()
+        self.gradients = dict()
+        self.activations = dict()
 
-class ModelLocalizerWrapper(torch.nn.Module):
-    def __init__(self, model):
-        super(ModelLocalizerWrapper, self).__init__()
-        self.model = model
-        self.feature_extractor = torch.nn.Sequential(*list(self.model.children())[:-1])
+        def backward_hook(module, grad_input, grad_output):
+            if torch.cuda.is_available():
+              self.gradients['value'] = grad_output[0].cuda()
+            else:
+              self.gradients['value'] = grad_output[0]
+            return None
+
+        def forward_hook(module, input, output):
+            if torch.cuda.is_available():
+              self.activations['value'] = output.cuda()
+            else:
+              self.activations['value'] = output
+            return None
+
+        if 'resnet' in model_type.lower():
+            self.target_layer = find_resnet_layer(self.model_arch, layer_name)
+
+        self.target_layer.register_forward_hook(forward_hook)
+        self.target_layer.register_backward_hook(backward_hook)
+
+    def forward(self, input, class_idx=None, retain_graph=False):
+        return None
+
+    def __call__(self, input, class_idx=None, retain_graph=False):
+        return self.forward(input, class_idx, retain_graph)
+
+
+class ScoreCAM(BaseCAM):
+    def __init__(self, model_dict):
+        super().__init__(model_dict)
+
+    def forward(self, input, class_idx=None, retain_graph=False):
+        b, c, h, w = input.size()
+        
+        # predication on raw input
+        logit = self.model_arch(input).cuda()
+        
+        if class_idx is None:
+            predicted_class = logit.max(1)[-1]
+            score = logit[:, logit.max(1)[-1]].squeeze()
+        else:
+            predicted_class = torch.LongTensor([class_idx])
+            score = logit[:, class_idx].squeeze()
+        
+        logit = F.softmax(logit)
+
+        if torch.cuda.is_available():
+          predicted_class= predicted_class.cuda()
+          score = score.cuda()
+          logit = logit.cuda()
+
+        self.model_arch.zero_grad()
+        score.backward(retain_graph=retain_graph)
+        activations = self.activations['value']
+        b, k, u, v = activations.size()
+        
+        score_saliency_map = torch.zeros((1, 1, h, w))
+
+        if torch.cuda.is_available():
+          activations = activations.cuda()
+          score_saliency_map = score_saliency_map.cuda()
+
+        with torch.no_grad():
+          for i in range(k):
+
+              # upsampling
+              saliency_map = torch.unsqueeze(activations[:, i, :, :], 1)
+              saliency_map = F.interpolate(saliency_map, size=(h, w), mode='bilinear', align_corners=False)
+              
+              if saliency_map.max() == saliency_map.min():
+                continue
+              
+              # normalize to 0-1
+              norm_saliency_map = (saliency_map - saliency_map.min()) / (saliency_map.max() - saliency_map.min())
+
+              # how much increase if keeping the highlighted region
+              # predication on masked input
+              output = self.model_arch(input * norm_saliency_map)
+              output = F.softmax(output)
+              score = output[0][predicted_class]
+
+              score_saliency_map +=  score * saliency_map
                 
-    def __call__(self, x):
-        y = self.feature_extractor(x)
-        return y
+        score_saliency_map = F.relu(score_saliency_map)
+        score_saliency_map_min, score_saliency_map_max = score_saliency_map.min(), score_saliency_map.max()
+
+        if score_saliency_map_min == score_saliency_map_max:
+            return None
+
+        score_saliency_map = (score_saliency_map - score_saliency_map_min).div(score_saliency_map_max - score_saliency_map_min).data
+
+        return score_saliency_map
+
+    def __call__(self, input, class_idx=None, retain_graph=False):
+        return self.forward(input, class_idx, retain_graph)
+
+
+def find_resnet_layer(arch, target_layer_name):
+    if target_layer_name is None:
+        target_layer_name = 'layer4'
+
+    if 'layer' in target_layer_name:
+        hierarchy = target_layer_name.split('_')
+        layer_num = int(hierarchy[0].lstrip('layer'))
+        if layer_num == 1:
+            target_layer = arch.layer1
+        elif layer_num == 2:
+            target_layer = arch.layer2
+        elif layer_num == 3:
+            target_layer = arch.layer3
+        elif layer_num == 4:
+            target_layer = arch.layer4
+        else:
+            raise ValueError('unknown layer : {}'.format(target_layer_name))
+
+        if len(hierarchy) >= 2:
+            bottleneck_num = int(hierarchy[1].lower().lstrip('bottleneck').lstrip('basicblock'))
+            target_layer = target_layer[bottleneck_num]
+
+        if len(hierarchy) >= 3:
+            target_layer = target_layer._modules[hierarchy[2]]
+
+        if len(hierarchy) == 4:
+            target_layer = target_layer._modules[hierarchy[3]]
+
+    else:
+        target_layer = arch._modules[target_layer_name]
+
+    return target_layer
+

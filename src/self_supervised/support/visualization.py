@@ -1,6 +1,10 @@
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve, auc
 from torch import Tensor
+import torch
+import cv2
+import numpy as np
+
 
 
 def plot_history(network_history, epochs, saving_path='', mode='training'):
@@ -43,5 +47,18 @@ def plot_roc(labels:Tensor, scores:Tensor, subject:str, saving_path:str):
     plt.close()
 
 
-def localize_defect():
-    pass
+def convert_for_localization(x, imsize=(256,256)):
+    x = cv2.resize(x.numpy(), imsize)
+    numer = x - np.min(x)
+    denom = (x.max() - x.min()) + 1e-8
+    x = numer / denom
+    x = (x * 255).astype("uint8")
+    return x
+
+
+def localize(image, heatmap):
+    colormap=cv2.COLORMAP_JET
+    heatmap = cv2.applyColorMap(heatmap, colormap)
+    heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
+    output = cv2.addWeighted(heatmap, 0.5, image, 1 - 0.5, 0)
+    return output
