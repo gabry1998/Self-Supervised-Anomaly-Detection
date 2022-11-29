@@ -15,12 +15,10 @@ from torch import Tensor
 class SSLModel(nn.Module):
     def __init__(self, 
                 num_classes:int,
-                num_epochs:int,
                 dims:array = CONST.DEFAULT_PROJECTION_HEAD_DIMS()):
         
         super().__init__()
         #self.seed = seed
-        self.num_epochs = num_epochs
         self.num_classes = num_classes
         
         self.feature_extractor = self.setup_feature_extractor()
@@ -78,7 +76,7 @@ class SSLModel(nn.Module):
         self.localization = p
     
         
-    def compute_features(self, x):
+    def compute_features(self, x, layer='layer4'):
         x = x.float()
         x = self.feature_extractor.conv1(x)
         x = self.feature_extractor.bn1(x)
@@ -91,7 +89,14 @@ class SSLModel(nn.Module):
         l4 = self.feature_extractor.layer4(l3)
     
         avg_pool = self.feature_extractor.avgpool(l4)
-        
+        if layer=='layer1':
+            return l1
+        if layer=='layer2':
+            return l2
+        if layer=='layer3':
+            return l3
+        if layer=='layer4':
+            return l4
         return (avg_pool, l1, l2, l3, l4)
 
 
@@ -123,7 +128,7 @@ class SSLM(pl.LightningModule):
         #np.random.seed(seed)
         #torch.random.manual_seed(seed)
         
-        self.model = SSLModel(self.num_classes, self.num_epochs)
+        self.model = SSLModel(self.num_classes)
         self.localization = False
     
     

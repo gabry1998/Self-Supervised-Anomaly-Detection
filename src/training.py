@@ -2,11 +2,8 @@ from self_supervised.datasets import *
 from self_supervised.model import SSLM, MetricTracker
 from self_supervised.support.visualization import plot_history
 import pytorch_lightning as pl
-from self_supervised.support.cutpaste_parameters import CPP
-import self_supervised.support.constants as CONST
 from tqdm import tqdm
 import os
-import sys
 
 
 def training_pipeline(
@@ -59,10 +56,8 @@ def training_pipeline(
     print('>>> training plot')
     plot_history(cb.log_metrics, epochs, result_path)
     print('>>> start training (fine tune whole net)')
-    pretext_model.lr = 0.00005
-    pretext_model.model.lr = 0.00005
+    pretext_model.lr = 0.001
     pretext_model.num_epochs = 20
-    pretext_model.model.num_epochs = 20
     cb = MetricTracker()
     trainer = pl.Trainer(
         callbacks= [cb],
@@ -70,7 +65,7 @@ def training_pipeline(
         devices=1, 
         max_epochs=20, 
         check_val_every_n_epoch=1,
-        reload_dataloaders_every_n_epochs=10)
+        reload_dataloaders_every_n_epochs=20)
     pretext_model.unfreeze_layers(True)
     trainer.fit(pretext_model, datamodule=datamodule)
     trainer.save_checkpoint(result_path+checkpoint_name)
@@ -85,7 +80,7 @@ if __name__ == "__main__":
     batch_size = 96
     train_val_split = 0.2
     seed = 0
-    lr = 0.001
+    lr = 0.003
     epochs = 30
     
     args = {
@@ -97,11 +92,7 @@ if __name__ == "__main__":
         'epochs': epochs
     }
     experiments = [
-        'bottle',
-        'grid',
-        'screw',
-        'tile',
-        'toothbrush'
+        'bottle'
     ]
     pbar = tqdm(range(len(experiments)))
     for i in pbar:

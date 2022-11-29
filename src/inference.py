@@ -1,14 +1,8 @@
-from self_supervised.model import GDE, SSLM, SSLModel, MetricTracker
+from self_supervised.model import GDE, SSLM
 from self_supervised.datasets import *
-import pytorch_lightning as pl
-from sklearn.metrics import classification_report
-import pandas as pd
-from sklearn.manifold import TSNE
-import seaborn as sns
-import matplotlib.pyplot as plt
 from tqdm import tqdm
-import self_supervised.support.constants as CONST
-from self_supervised.support.visualization import plot_roc
+import self_supervised.support.visualization as vis
+import self_supervised.metrics as mtr
 
 
 def inference_pipeline(
@@ -38,7 +32,7 @@ def inference_pipeline(
     print('')
     print('>>> Generating test dataset (artificial)')
     start = time.time()
-    datamodule = GenerativeDatamodule(
+    artificial = GenerativeDatamodule(
                 dataset_dir,
                 imsize=imsize,
                 batch_size=batch_size,
@@ -46,7 +40,7 @@ def inference_pipeline(
                 min_dataset_length=500,
                 duplication=True
     )
-    datamodule.setup('test')
+    artificial.setup('test')
     end = time.time() - start
     print('Generated in '+str(end)+ 'sec')
     
@@ -60,113 +54,66 @@ def inference_pipeline(
     )
     mvtec.setup()
     print('>>> Inferencing...')
-    x, y = next(iter(datamodule.test_dataloader())) 
+    x_artificial, y_artificial = next(iter(artificial.test_dataloader())) 
     if cuda_available:
-        x = x.to('cuda')
-        y_hat, embeddings = sslm(x)
-        y_hat = y_hat.to('cpu')
-        embeddings = embeddings.to('cpu')
+        y_hat_artificial, embeddings_artificial = sslm(x_artificial.to('cuda'))
     else:
-        x = x.to('cpu')
-        y_hat, embeddings = sslm(x)
-        
-    y_hat = torch.max(y_hat.data, 1)
-    y_hat = y_hat.indices
+        y_hat_artificial, embeddings_artificial = sslm(x_artificial.to('cpu'))
+    y_hat_artificial = y_hat_artificial.to('cpu')
+    embeddings_artificial = embeddings_artificial.to('cpu')
+    y_hat_artificial = get_prediction_class(y_hat_artificial)
     
     print('>>> Printing report')
-    
-    result = classification_report( 
-            y,
-            y_hat,
-            labels=[0,1,2],
-            output_dict=True
-        )
-    df = pd.DataFrame.from_dict(result)
+    df = mtr.report(y=y_artificial, y_hat=y_hat_artificial)
     df.to_csv(results_dir+'/metric_report.csv', index = False)
-    
+
     print('>>> Inferencing over real mvtec images...')
-    x, gt = next(iter(mvtec.test_dataloader())) 
-    mvtec_labels = []
-    for ground_truth in gt:
-        if torch.sum(ground_truth) == 0:
-            mvtec_labels.append(0)
-        else:
-            mvtec_labels.append(3)
-            
+    x_mvtec, gt_mvtec = next(iter(mvtec.test_dataloader())) 
+    y_mvtec = gt2label(gt_mvtec, negative=0, positive=3)
+           
     if cuda_available:
-        x = x.to('cuda')
-        y_hat_mvtec, embeddings_mvtec = sslm(x)
-        y_hat_mvtec = y_hat_mvtec.to('cpu')
-        embeddings_mvtec = embeddings_mvtec.to('cpu')
+        y_hat_mvtec, embeddings_mvtec = sslm(x_mvtec.to('cuda'))
     else:
-        x = x.to('cpu')
-        y_hat_mvtec, embeddings_mvtec = sslm(x)
-        
-    y_hat_mvtec = torch.max(y_hat_mvtec.data, 1)
-    y_hat_mvtec = y_hat_mvtec.indices
+        y_hat_mvtec, embeddings_mvtec = sslm(x_mvtec.to('cpu'))
+    y_hat_mvtec = y_hat_mvtec.to('cpu')
+    embeddings_mvtec = embeddings_mvtec.to('cpu')  
+    y_hat_mvtec = get_prediction_class(y_hat_mvtec)
     
-    y_artificial = y.tolist()
-    
-    total_y = y_artificial + mvtec_labels
+    y_artificial = y_artificial.tolist() 
+    total_y = y_artificial + y_mvtec
     total_y = torch.tensor(np.array(total_y))
     
-    tot_embeddings = torch.cat([embeddings, embeddings_mvtec])
+    total_embeddings = torch.cat([embeddings_artificial, embeddings_mvtec])
 
     print('>>> Generating tsne visualization')
-    tsne = TSNE(n_components=2, random_state=0)
-    tsne_results = tsne.fit_transform(tot_embeddings.detach().numpy())
-    tx = tsne_results[:, 0]
-    ty = tsne_results[:, 1]
-
-    df = pd.DataFrame()
-    df["labels"] = total_y
-    df["comp-1"] = tx
-    df["comp-2"] = ty
-    plt.figure()
-
-    sns.scatterplot(hue=df.labels.tolist(),
-                    x='comp-1',
-                    y='comp-2',
-                    palette=sns.color_palette("hls", 4),
-                    data=df).set(title='Embeddings projection ('+subject+')')
-    plt.savefig(results_dir+'/tsne.png')
+    vis.plot_tsne(total_embeddings, total_y, results_dir, subject)
     
     print('>>> calculating ROC AUC curve..')
-    train_embed = []
+    train_embeddings_gde = []
     for x, _ in mvtec.train_dataloader():
-        _, train_embeddings = sslm(x.to('cuda'))
-        train_embeddings = train_embeddings.to('cpu')
-        train_embed.append(train_embeddings)
-    train_embed = torch.cat(train_embed).to('cpu').detach()
+        _, batch_train_embeddings = sslm(x.to('cuda'))
+        train_embeddings_gde.append(batch_train_embeddings.to('cpu'))
+    train_embeddings_gde = torch.cat(train_embeddings_gde).to('cpu').detach()
     
-    test_labels = []
-    test_embeds = []
+    gt_mvtec_test = []
+    test_embeddings_gde = []
     with torch.no_grad():
         for x, label in mvtec.test_dataloader():
-            y_hat, embeddings = sslm(x.to('cuda'))
-
-            # save 
-            test_embeds.append(embeddings.to('cpu').detach())
-            test_labels.append(label.to('cpu').detach())
-    test_labels = torch.cat(test_labels)
-    test_embeds = torch.cat(test_embeds)
+            _, batch_embeddings = sslm(x.to('cuda'))
+            test_embeddings_gde.append(batch_embeddings.to('cpu').detach())
+            gt_mvtec_test.append(label.to('cpu').detach())
+    gt_mvtec_test = torch.cat(gt_mvtec_test)
+    test_embeddings_gde = torch.cat(test_embeddings_gde)
     
-    test_embeds = torch.nn.functional.normalize(test_embeds, p=2, dim=1)
-    train_embed = torch.nn.functional.normalize(train_embed, p=2, dim=1)
+    test_embeddings_gde = torch.nn.functional.normalize(test_embeddings_gde, p=2, dim=1)
+    train_embeddings_gde = torch.nn.functional.normalize(train_embeddings_gde, p=2, dim=1)
     
     gde = GDE()
-    gde.fit(train_embed)
-    scores = gde.predict(test_embeds)
-
-    int_labels = []
-    for x in test_labels:
-      if torch.sum(x) == 0:
-        int_labels.append(0)
-      else:
-        int_labels.append(1)
-    test_labels = torch.tensor(int_labels)
+    gde.fit(train_embeddings_gde)
+    mvtec_test_scores = gde.predict(test_embeddings_gde)
+    mvtec_test_labels = gt2label(gt_mvtec_test)
     
-    plot_roc(test_labels, scores, subject, results_dir+'/roc.png')
+    vis.plot_roc(mvtec_test_labels, mvtec_test_scores, subject, results_dir+'/roc.png')
 
 if __name__ == "__main__":
     dataset_dir = 'dataset/'
@@ -182,11 +129,7 @@ if __name__ == "__main__":
     }
     
     experiments = [
-        'bottle',
-        'grid',
-        'screw',
-        'tile',
-        'toothbrush'
+        'bottle'
     ]
     
     pbar = tqdm(range(len(experiments)))

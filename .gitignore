@@ -13,6 +13,7 @@ lightning_logs/
 temp/
 src/test.py
 best_model.ckpt
+memes/
 
 
 # Distribution / packaging

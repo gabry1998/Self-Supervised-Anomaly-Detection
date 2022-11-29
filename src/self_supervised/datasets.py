@@ -127,7 +127,7 @@ class GenerativeDataset(Dataset):
             images_filenames:array,
             imsize=CONST.DEFAULT_IMSIZE(),
             transform=None,
-            distortion=True) -> None:
+            distortion=False) -> None:
 
         super().__init__()
         self.images_filenames = images_filenames
