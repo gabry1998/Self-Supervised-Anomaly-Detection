@@ -45,10 +45,10 @@ Following the paper values, we have:
 
 |  Jitter augmentations | Intensity |
 | :--------------:      | :-----: |
-|  Hue       | 0.1     |
-|  Contrast       | 0.1     |
-|  Brightness      | 0.1     |
-|  Saturation       | 0.1     |
+|  Hue       | 0.3     |
+|  Contrast       | 0.3     |
+|  Brightness      | 0.3     |
+|  Saturation       | 0.3     |
 
 Those augmentations are only applied to the artificial anomalies (cutpaste patches) <br />
 The images labeled as '0' are augmentation-free. <br />
@@ -63,17 +63,20 @@ All images have size (256,256) and are randomly rotated from a selection of [0, 
 (some are not equal to the paper's one)
 | |  |
 | :-----: | :-----: |
-| Batch size | 64 |
+| Batch size | 96 |
 | seed | 0 |
 | Backbone | ResNet-18 |
 | Pretrained | Yes (Imagenet Weights) |
 | Head projection | MPL of 5 layers with dim=512 (the 6-th has dim=128) |
 | optimizer | SGD |
-| learning rate | 0.001 |
+| learning rate (backbone frozen) | 0.003 |
+| learning rate (including backbone) | 0.001 |
 | Momentum | 0.9 |
 | Weight decay rate | 0.00003 |
 | epochs (backbone frozen) | 30 |
 | epochs (including backbone) | 20 |
+
+The network is trained two times, first with imagenet weights frozen, then finetuning the whole Net.
 
 ### Computation Examples
 
@@ -85,7 +88,11 @@ All images have size (256,256) and are randomly rotated from a selection of [0, 
 
 | t-SNE | ROC |
 | :--: | :--: |
-| <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/bottle/tsne.png"/> | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/bottle/roc.png"/>|
+| <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/bottle/image_level/tsne.png"/> | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/bottle/image_level/roc.png"/>|
+
+|  Localization |  Heatmap  |
+| :--:          | :---------:  |
+| Image Level   | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/bottle/image_level/gradcam/2.png"/> |
 
 #### Texture (GRID)
 | grid example |
@@ -94,7 +101,10 @@ All images have size (256,256) and are randomly rotated from a selection of [0, 
 
 |t-SNE| ROC |
 | :--: | :--: |
-| <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/grid/tsne.png"/> | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/grid/roc.png"/> |
+| <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/grid/image_level/tsne.png"/> | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/grid/image_level/roc.png"/> |
 
+|  Localization |  Heatmap  |
+| :--:          | :---------:  |
+| Image Level   | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/grid/image_level/gradcam/0.png"/> |
 #### Explanation
 Textures defects are very hard to identify because of homogeneous patterns. Still, in the example we have an almost perfect scenario in BOTTLES, thanks to (assuming) easy object recognition in the images and his defects (real and artificial). In GRID we can see scars (2) isolated from the rest of classes, thanks to peculiarity of that defect (its literally a colored line over a homogeneous image). To improve Texture defect recognition we can apply more image augmentation, for example contrast, brightness, sharpening, etc to emphatize more the defect over the whole image and give the model a easier job.
