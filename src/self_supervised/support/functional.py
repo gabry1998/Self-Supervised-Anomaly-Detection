@@ -36,7 +36,6 @@ def get_mvtec_gt_filename_counterpart(filename:str, groundtruth_dir):
     image_name = filename_split[2]
     if defection == 'good':
         return None
-    
     image_name = image_name.split('.')
     return groundtruth_dir+defection+'/'+image_name[0]+'_mask'+'.'+image_name[1]
 
@@ -115,13 +114,15 @@ class GaussianSmooth:
         else:
             gkern1d = signal.gaussian(self.kernel_size, std=self.std).reshape(self.kernel_size, 1)
         gkern2d = np.outer(gkern1d, gkern1d)
-        return gkern2d
+        return torch.tensor(gkern2d)
     
     def upsample(self, X):
         tconv = torch.nn.ConvTranspose2d(1,1, kernel_size=self.kernel_size, stride=self.stride)
-        tconv.weight.data = torch.from_numpy(self.gkern()).unsqueeze(0).unsqueeze(0).float()
+        tconv.weight.data = self.gkern().unsqueeze(0).unsqueeze(0).float()
         tconv.to(self.device)
-        X = torch.from_numpy(X).float().to(self.device)
-        out = tconv(X).detach().cpu().numpy()
+        X = X.float().to(self.device)
+        X = tconv(X)
+        torch.transpose(X, 0, 1)
+        out = tconv(X).detach().cpu()
         return out
     

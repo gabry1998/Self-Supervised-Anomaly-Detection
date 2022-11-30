@@ -21,7 +21,7 @@ class MVTecDataset(Dataset):
             images_filenames:array,
             imsize:tuple=CONST.DEFAULT_IMSIZE(),
             transform:Compose=None,
-            mode:str='test'
+            patch_localization=False
             ) -> None:
         
         super().__init__()
@@ -30,30 +30,20 @@ class MVTecDataset(Dataset):
         self.images_filenames = images_filenames
         self.imsize = imsize
         self.transform = transform
-        self.mode = mode
     
     def __getitem__(self, index):
-        if self.mode == 'test':
-            filename = self.images_filenames[index]
-            test_image = Image.open(filename).resize(self.imsize).convert('RGB')
-            
-            gt_filename = get_mvtec_gt_filename_counterpart(
-                filename,
-                self.dataset_dir+'ground_truth/')
-            gt = ground_truth(gt_filename, self.imsize)
-            
-            if self.transform:
-                test_image = self.transform(test_image)
-            gt = transforms.ToTensor()(gt)
-            return test_image, gt
-        else:
-            filename = self.images_filenames[index]
-            train_image = Image.open(filename).resize(self.imsize).convert('RGB')
-            gt = ground_truth(None, self.imsize)
-            if self.transform:
-                train_image = self.transform(train_image)
-            gt = transforms.ToTensor()(gt)
-            return train_image, gt
+        filename = self.images_filenames[index]
+        test_image = Image.open(filename).resize(self.imsize).convert('RGB')
+        
+        gt_filename = get_mvtec_gt_filename_counterpart(
+            filename,
+            self.dataset_dir+'ground_truth/')
+        gt = ground_truth(gt_filename, self.imsize)
+        
+        if self.transform:
+            test_image = self.transform(test_image)
+        gt = transforms.ToTensor()(gt)
+        return test_image, gt
     
     def __len__(self):
         return self.images_filenames.shape[0]
@@ -93,14 +83,14 @@ class MVTecDatamodule(pl.LightningDataModule):
             self.subject,
             self.train_images_filenames,
             transform=self.transform,
-            mode='train'
+            patch_localization=False
         )
         self.test_dataset = MVTecDataset(
             self.root_dir,
             self.subject,
             self.test_images_filenames,
             transform=self.transform,
-            mode='test'
+            patch_localization=False
         )
     
     
@@ -127,7 +117,9 @@ class GenerativeDataset(Dataset):
             images_filenames:array,
             imsize=CONST.DEFAULT_IMSIZE(),
             transform=None,
-            distortion=False) -> None:
+            distortion=False,
+            patch_localization=False,
+            patch_size:tuple=CONST.DEFAULT_PATCH_SIZE()) -> None:
 
         super().__init__()
         self.images_filenames = images_filenames
@@ -138,8 +130,9 @@ class GenerativeDataset(Dataset):
         
         self.imsize = imsize
         self.transform = transform
-        
         self.distortion = distortion
+        self.patch_localization = patch_localization
+        self.patch_size = patch_size
         
         self.labels = self.generate_labels()
 
@@ -152,6 +145,7 @@ class GenerativeDataset(Dataset):
     def __getitem__(self, index):
         x = self.images_filenames[index]
         y = self.labels[index]
+        
         x = self.generate_cutpaste_3way(x, y)
         
         if self.transform:
@@ -165,6 +159,8 @@ class GenerativeDataset(Dataset):
     
     def generate_cutpaste_3way(self, x, y):
         x = Image.open(x).resize(self.imsize).convert('RGB')
+        if self.patch_localization:
+            x = transforms.RandomCrop(self.patch_size)(x)
         x = generate_rotation(x)
         if y == 0:
             return x
@@ -191,7 +187,10 @@ class GenerativeDatamodule(pl.LightningDataModule):
             train_val_split:float=CONST.DEFAULT_TRAIN_VAL_SPLIT(),
             seed:int=CONST.DEFAULT_SEED(),
             min_dataset_length:int=1000,
-            duplication=False):
+            duplication=False,
+            distortion=False,
+            patch_localization=False,
+            patch_size:tuple=CONST.DEFAULT_PATCH_SIZE()):
         
         super().__init__()
         self.save_hyperparameters()
@@ -204,6 +203,9 @@ class GenerativeDatamodule(pl.LightningDataModule):
         self.seed = seed
         self.min_dataset_length = min_dataset_length
         self.duplication = duplication
+        self.distortion = distortion
+        self.patch_localization = patch_localization
+        self.patch_size = patch_size
 
         self.transform = CONST.DEFAULT_TRANSFORMS()
         
@@ -245,20 +247,29 @@ class GenerativeDatamodule(pl.LightningDataModule):
             self.val_dataset = GenerativeDataset(
                 self.val_images_filenames,
                 imsize=self.imsize,
-                transform=self.transform)
+                transform=self.transform,
+                distortion=self.distortion,
+                patch_localization=self.patch_localization,
+                patch_size=self.patch_size)
             
         if stage == 'test' or stage is None:
             self.test_dataset = GenerativeDataset(
                 self.test_images_filenames,
                 imsize=self.imsize,
-                transform=self.transform)
+                transform=self.transform,
+                distortion=self.distortion,
+                patch_localization=self.patch_localization,
+                patch_size=self.patch_size)
 
 
     def train_dataloader(self):
         self.train_dataset = GenerativeDataset(
                 self.train_images_filenames,
                 imsize=self.imsize,
-                transform=self.transform)
+                transform=self.transform,
+                distortion=self.distortion,
+                patch_localization=self.patch_localization,
+                patch_size=self.patch_size)
         
         return DataLoader(
             self.train_dataset, 

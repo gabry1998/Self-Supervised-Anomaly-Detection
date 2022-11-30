@@ -16,13 +16,15 @@ import numpy as np
 
 def localization_pipeline(
         dataset_dir:str, 
-        results_dir:str, 
-        subject:str):
+        root_dir:str, 
+        subject:str,
+        level:str,
+        seed=CONST.DEFAULT_SEED()):
     
     imsize = CONST.DEFAULT_IMSIZE()
     batch_size = CONST.DEFAULT_BATCH_SIZE()
-    seed = CONST.DEFAULT_SEED()
-    gradcam_dir = results_dir+subject+'/gradcam/'
+    gradcam_dir = root_dir+subject+'/'+level+'/gradcam/'
+    model_dir = root_dir+subject+'/'+level+'/'+CONST.DEFAULT_CHECKPOINT_MODEL_NAME()
     
     print('>>> preparing datamodule')
     mvtec = dt.MVTecDatamodule(
@@ -35,14 +37,13 @@ def localization_pipeline(
     )
     mvtec.setup()
     sslm = md.SSLM.load_from_checkpoint(
-    results_dir+subject+'/'+CONST.DEFAULT_CHECKPOINT_MODEL_NAME())
+    model_dir)
     sslm.eval()
     
     gradcam = GradCam(
-        md.SSLM.load_from_checkpoint(
-            results_dir+subject+'/'+CONST.DEFAULT_CHECKPOINT_MODEL_NAME()).model)
+        md.SSLM.load_from_checkpoint(model_dir).model)
     j = len(mvtec.test_dataset)-1
-    random.seed(1)
+    random.seed(seed)
     for i in tqdm(range(5), desc='localizing defects'):
         input_image_tensor, gt = mvtec.test_dataset[random.randint(0, j)]
         input_tensor_norm = transforms.Normalize(
@@ -67,7 +68,7 @@ def localization_pipeline(
             image, 
             heatmap, 
             gt, 
-            heatmap2mask(saliency_map.squeeze(), threshold=0.85),
+            heatmap2mask(saliency_map.squeeze(), threshold=0.75),
             results_dir=gradcam_dir,
             name='result '+ str(i))
         os.system('clear')
@@ -78,7 +79,7 @@ def localize_single_image(
         results_dir:str,
         subject:str):
     
-    gradcam_dir = 'memes/results'
+    gradcam_dir = 'memes/results/'
     imsize = CONST.DEFAULT_IMSIZE()
     
     #image
@@ -109,28 +110,32 @@ def localize_single_image(
     heatmap = localize(input_image_tensor[None, :], saliency_map)
     image = imagetensor2array(input_image_tensor)
     #gt = imagetensor2array(gt)
-    plot_heatmap(image, heatmap, results_dir=gradcam_dir, name='davide', title=title)
+    plot_heatmap(image, heatmap, results_dir=gradcam_dir, name='broken_large', title=title)
 
 
 def pipeline():
     dataset_dir = 'dataset/'
-    results_dir = 'temp/computations/'
+    root_dir = 'outputs/computations/'
+    seed = 0
     localization_pipeline(
         dataset_dir=dataset_dir,
-        results_dir=results_dir,
-        subject='bottle'
+        root_dir=root_dir,
+        subject='grid',
+        level='image_level',
+        seed=seed
     )
 
 
 def singleim():
     results_dir = 'temp/computations/'
     localize_single_image(
-        image_filename='memes/raw/davide.jpg',
+        image_filename='dataset/bottle/test/broken_large/000.png',
         results_dir=results_dir,
         subject='bottle'
     )
 
+
 if __name__ == "__main__":
-    #pipeline()
-    singleim()
+    pipeline()
+    #singleim()
     

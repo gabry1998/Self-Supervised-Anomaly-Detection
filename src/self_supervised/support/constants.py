@@ -28,13 +28,17 @@ def DEFAULT_IMSIZE():
     return (256,256)
 
 
+def DEFAULT_PATCH_SIZE():
+    return 64
+
+
 def DEFAULT_NUM_WORKERS():
     return 8
 
 
 # default model parameters
 def DEFAULT_BATCH_SIZE():
-    return 64
+    return 96
 
 
 def DEFAULT_SEED():
@@ -42,7 +46,7 @@ def DEFAULT_SEED():
 
 
 def DEFAULT_LEARNING_RATE():
-    return 0.001
+    return 0.003
 
 
 def DEFAULT_EPOCHS():

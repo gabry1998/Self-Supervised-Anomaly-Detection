@@ -10,9 +10,10 @@ def training_pipeline(
         dataset_dir:str, 
         results_dir:str, 
         subject:str,
+        level:str,
         args:dict=None):
     
-    result_path = results_dir+subject+'/'
+    result_path = results_dir+subject+'/'+level+'/'
     checkpoint_name = 'best_model.ckpt'
     
     if not os.path.exists(result_path):
@@ -30,14 +31,26 @@ def training_pipeline(
     
     
     print('>>> preparing datamodule')
-    datamodule = GenerativeDatamodule(
-        dataset_dir+subject+'/',
-        imsize=imsize,
-        batch_size=batch_size,
-        train_val_split=train_val_split,
-        seed=seed,
-        duplication=True
-    )
+    if level == 'image_level':
+        datamodule = GenerativeDatamodule(
+            dataset_dir+subject+'/',
+            imsize=imsize,
+            batch_size=batch_size,
+            train_val_split=train_val_split,
+            seed=seed,
+            duplication=True,
+            patch_localization=False
+        )
+    else:
+        datamodule = GenerativeDatamodule(
+            dataset_dir+subject+'/',
+            imsize=imsize,
+            batch_size=batch_size,
+            train_val_split=train_val_split,
+            seed=seed,
+            duplication=True,
+            patch_localization=True
+        )
 
     
     print('>>> setting up the model')
@@ -74,7 +87,7 @@ def training_pipeline(
 
 if __name__ == "__main__":
     dataset_dir = 'dataset/'
-    results_dir = 'temp/computations/'
+    results_dir = 'outputs/computations/'
     
     imsize= (256,256)
     batch_size = 96
@@ -92,15 +105,18 @@ if __name__ == "__main__":
         'epochs': epochs
     }
     experiments = [
-        'bottle'
+        ('grid', 'patch_level'),
+        ('grid', 'image_level')
+        
     ]
     pbar = tqdm(range(len(experiments)))
     for i in pbar:
-        pbar.set_description('Pipeline Execution | current subject is '+experiments[i].upper())
+        pbar.set_description('Pipeline Execution | current subject is '+experiments[i][0].upper())
         training_pipeline(
             dataset_dir, 
             results_dir, 
-            experiments[i],
+            experiments[i][0],
+            experiments[i][1],
             args)
         os.system('clear')
         

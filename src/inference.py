@@ -6,9 +6,10 @@ import self_supervised.metrics as mtr
 
 
 def inference_pipeline(
+        dataset_dir:str,
         root_dir:str,
-        outputs_dir:str,
         subject:str,
+        level:str,
         args:dict=None):
     
     if torch.cuda.is_available():
@@ -20,9 +21,10 @@ def inference_pipeline(
     batch_size = args['batch_size']
     seed = args['seed']
     
-    results_dir = outputs_dir+subject
-    model_dir = results_dir+'/best_model.ckpt'
-    dataset_dir = root_dir+subject+'/'
+    results_dir = root_dir+subject+'/'+level+'/'
+    print(results_dir)
+    model_dir = results_dir+'best_model.ckpt'
+    print(model_dir)
     sslm = SSLM()
     sslm = SSLM.load_from_checkpoint(model_dir, model=sslm.model)
     sslm.eval()
@@ -32,21 +34,33 @@ def inference_pipeline(
     print('')
     print('>>> Generating test dataset (artificial)')
     start = time.time()
-    artificial = GenerativeDatamodule(
-                dataset_dir,
-                imsize=imsize,
-                batch_size=batch_size,
-                seed=seed,
-                min_dataset_length=500,
-                duplication=True
-    )
+    if level == 'image_level':
+        artificial = GenerativeDatamodule(
+            dataset_dir+subject+'/',
+            imsize=imsize,
+            batch_size=batch_size,
+            seed=seed,
+            duplication=True,
+            min_dataset_length=500,
+            patch_localization=False
+        )
+    else:
+        artificial = GenerativeDatamodule(
+            dataset_dir+subject+'/',
+            imsize=imsize,
+            batch_size=batch_size,
+            seed=seed,
+            duplication=True,
+            min_dataset_length=500,
+            patch_localization=True
+        )
     artificial.setup('test')
     end = time.time() - start
     print('Generated in '+str(end)+ 'sec')
     
     print('>>> loading mvtec dataset')
     mvtec = MVTecDatamodule(
-                dataset_dir,
+                dataset_dir+subject+'/',
                 subject=subject,
                 imsize=imsize,
                 batch_size=batch_size,
@@ -117,7 +131,7 @@ def inference_pipeline(
 
 if __name__ == "__main__":
     dataset_dir = 'dataset/'
-    results_dir = 'temp/computations/' 
+    root_dir = 'outputs/computations/' 
     imsize=(256,256)
     batch_size = 128
     seed = 0
@@ -129,15 +143,16 @@ if __name__ == "__main__":
     }
     
     experiments = [
-        'bottle'
+        ('grid', 'image_level')
     ]
     
     pbar = tqdm(range(len(experiments)))
     for i in pbar:
-        pbar.set_description('Pipeline Execution | current subject is '+experiments[i].upper())
+        pbar.set_description('Pipeline Execution | current subject is '+experiments[i][0].upper())
         inference_pipeline(
             dataset_dir, 
-            results_dir, 
-            experiments[i],
+            root_dir, 
+            experiments[i][0],
+            experiments[i][1],
             args)
         os.system('clear')
