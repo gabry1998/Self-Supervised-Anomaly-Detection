@@ -60,6 +60,9 @@ def duplicate_filenames(filenames, baseline=2000):
 
 def gt2label(gt_list:Tensor, negative=0, positive=1):
     return [negative if torch.sum(x) == 0 else positive for x in gt_list]
+
+def gtpatches2labels(gt_patches:Tensor, negative=0, positive=1):
+    return [negative if torch.sum(x) == 0 else positive for x in gt_patches]
     
 
 def list2np(images, labels):
@@ -81,11 +84,22 @@ def imagetensor2array(image_tensor:Tensor):
 def heatmap2mask(heatmap, threshold=0.7):
     return heatmap > threshold
 
-def extract_patches(image:Tensor, dim=64, stride=32):
+def extract_patches(image:Tensor, dim=32, stride=4):
+    b, c, h, w = image.shape
     patches = image.unfold(2, dim, stride).unfold(3, dim, stride)
     patches = patches.reshape(1, 3, -1, dim, dim)
     patches = patches.squeeze()
     patches = torch.permute(patches, (1,0,2,3))
+    return patches
+
+
+def extract_mask_patches(image:Tensor, dim=32, stride=4):
+    patches = image.unfold(2, dim, stride).unfold(3, dim, stride)
+    patches = patches.reshape(1, 3, -1, dim, dim)
+    patches = patches.squeeze()
+    patches = torch.permute(patches, (1,0,2,3))
+    p, c, h ,w = patches.shape
+    patches = patches.reshape(p*c, 1, h, w)
     return patches
 
 
@@ -117,12 +131,15 @@ class GaussianSmooth:
         return torch.tensor(gkern2d)
     
     def upsample(self, X):
-        tconv = torch.nn.ConvTranspose2d(1,1, kernel_size=self.kernel_size, stride=self.stride)
+        tconv = torch.nn.ConvTranspose2d(
+            1,
+            1, 
+            kernel_size=self.kernel_size, 
+            stride=self.stride)
+        
         tconv.weight.data = self.gkern().unsqueeze(0).unsqueeze(0).float()
         tconv.to(self.device)
         X = X.float().to(self.device)
-        X = tconv(X)
-        torch.transpose(X, 0, 1)
         out = tconv(X).detach().cpu()
         return out
     

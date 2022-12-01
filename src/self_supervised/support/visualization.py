@@ -14,7 +14,10 @@ import os
 
 
 
-def plot_history(network_history, epochs, saving_path='', mode='training'):
+def plot_history(network_history, epochs, saving_path=None, mode='training'):
+    if saving_path and not os.path.exists(saving_path):
+        os.makedirs(saving_path)
+        
     x_plot = list(range(1,epochs+1))
     plt.figure()
     plt.xlabel('Epochs')
@@ -22,7 +25,10 @@ def plot_history(network_history, epochs, saving_path='', mode='training'):
     plt.plot(x_plot, network_history['train']['loss'])
     plt.plot(x_plot, network_history['val']['loss'])
     plt.legend(['Training', 'Validation'])
-    plt.savefig(saving_path+mode+'_loss.png')
+    if saving_path:
+        plt.savefig(saving_path+mode+'_loss.png')
+    else:
+        plt.savefig(mode+'_loss.png')
 
     plt.figure()
     plt.xlabel('Epochs')
@@ -30,11 +36,17 @@ def plot_history(network_history, epochs, saving_path='', mode='training'):
     plt.plot(x_plot, network_history['train']['accuracy'])
     plt.plot(x_plot, network_history['val']['accuracy'])
     plt.legend(['Training', 'Validation'], loc='lower right')
-    plt.savefig(saving_path+mode+'_accuracy.png')
+    if saving_path:
+        plt.savefig(saving_path+mode+'_accuracy.png')
+    else:
+        plt.savefig(mode+'_accuracy.png')
     plt.show()
+    plt.close()
 
-
-def plot_roc(labels:Tensor, scores:Tensor, subject:str, saving_path:str):
+def plot_roc(labels:Tensor, scores:Tensor, saving_path:str=None, title:str='', name:str='roc.png'):
+    if saving_path and not os.path.exists(saving_path):
+        os.makedirs(saving_path)
+        
     fpr, tpr, _ = roc_curve(labels, scores)
     roc_auc = auc(fpr, tpr)
 
@@ -46,15 +58,22 @@ def plot_roc(labels:Tensor, scores:Tensor, subject:str, saving_path:str):
     plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
     plt.xlim([0.0, 1.0])
     plt.ylim([0.0, 1.05])
-    plt.title('Roc curve ['+subject+']')
+    plt.title(title)
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
     plt.legend(loc="lower right")
-    plt.savefig(saving_path)
+    
+    if saving_path:
+        plt.savefig(saving_path+name)
+    else:
+        plt.savefig(name)
     plt.close()
 
 
-def plot_tsne(embeddings:Tensor, labels:Tensor, results_dir:str, subject:str=''):
+def plot_tsne(embeddings:Tensor, labels:Tensor, saving_path:str=None, title:str='', name:str='tsne.png'):
+    if saving_path and not os.path.exists(saving_path):
+        os.makedirs(saving_path)
+        
     tsne = TSNE(n_components=2, random_state=0)
     tsne_results = tsne.fit_transform(embeddings.detach().numpy())
     tx = tsne_results[:, 0]
@@ -70,25 +89,47 @@ def plot_tsne(embeddings:Tensor, labels:Tensor, results_dir:str, subject:str='')
                     x='comp-1',
                     y='comp-2',
                     palette=sns.color_palette("hls", 4),
-                    data=df).set(title='Embeddings projection ('+subject+')')
-    plt.savefig(results_dir+'/tsne.png')
+                    data=df).set(title=title)
+    if saving_path:
+        plt.savefig(saving_path+name)
+    else:
+        plt.savefig(name)
+    plt.close()
 
-
-def plot_heatmap(image, heatmap, results_dir:str, title='', name='gradcam'):
-    hseparator = np.array(Image.new(mode='RGB', size=(6,256), color=(255,255,255)))
-    output = np.hstack([image, hseparator, heatmap])    
-    plt.title(title)
-    plt.imshow(output)
-    plt.axis('off')
-    if not os.path.exists(results_dir):
-        os.makedirs(results_dir)
-
-    plt.savefig(results_dir+name+'.png', bbox_inches='tight')
+def plot_heatmap(image, heatmap, saving_path:str=None, name:str='gradcam.png'):
+    if saving_path and not os.path.exists(saving_path):
+        os.makedirs(saving_path)
+    
+    fig, axs = plt.subplots(1,2)
+    
+    axs[0].axis('off')
+    axs[0].set_title('original')
+    axs[0].imshow(image)
+    
+    axs[1].axis('off')
+    axs[1].set_title('localization')
+    axs[1].imshow(heatmap)
+    
+    if saving_path:
+        plt.savefig(saving_path+name, bbox_inches='tight')
+    else:
+        plt.savefig(name, bbox_inches='tight')
     plt.close()
     
 
-def plot_heatmap_and_masks(image, heatmap, gt_mask, predicted_mask, results_dir, name='plot'):
+def plot_heatmap_and_masks(
+        image, 
+        heatmap, 
+        gt_mask, 
+        predicted_mask, 
+        saving_path:str=None, 
+        name:str='heatmap_and_masks.png'):
+    
+    if saving_path and not os.path.exists(saving_path):
+        os.makedirs(saving_path)
+    
     fig, axs = plt.subplots(1,4)
+    
     axs[0].axis('off')
     axs[0].set_title('original')
     axs[0].imshow(image)
@@ -104,7 +145,10 @@ def plot_heatmap_and_masks(image, heatmap, gt_mask, predicted_mask, results_dir,
     axs[3].axis('off')
     axs[3].set_title('predicted mask')
     axs[3].imshow(np.array(predicted_mask, dtype=float))
-    plt.savefig(results_dir+name+'.png', bbox_inches='tight')
+    if saving_path:
+        plt.savefig(saving_path+name, bbox_inches='tight')
+    else:
+        plt.savefig(name, bbox_inches='tight')
     plt.close()
 
 def localize(image:Tensor, heatmap:Tensor):

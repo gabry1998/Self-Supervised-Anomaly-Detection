@@ -20,6 +20,8 @@ import self_supervised.model as md
 import cv2
 from sklearn import preprocessing
 
+from self_supervised.support.visualization import localize, plot_heatmap, plot_roc
+
 
 def read_test():
     x = get_image_filenames('dataset/bottle/train/good/')
@@ -67,7 +69,6 @@ def gt_test():
     
     print(y_hat4)
 
-gt_test()
 
 def tqdm_test():
     
@@ -96,7 +97,7 @@ def test_GDE_image_level():
     )
     datamodule.setup()
     
-    sslm = SSLM.load_from_checkpoint('outputs/computations/bottle/generative_dataset/3-way/best_model.ckpt')
+    sslm = SSLM.load_from_checkpoint('outputs/computations/bottle/image_level/best_model.ckpt')
     sslm.eval()
     sslm.to('cuda')
     
@@ -124,8 +125,8 @@ def test_GDE_image_level():
     
     print(test_embeds.shape)
     print(test_labels.shape)
-    test_embeds = torch.nn.functional.normalize(test_embeds, p=2, dim=1)
-    train_embed = torch.nn.functional.normalize(train_embed, p=2, dim=1)
+    #test_embeds = torch.nn.functional.normalize(test_embeds, p=2, dim=1)
+    #train_embed = torch.nn.functional.normalize(train_embed, p=2, dim=1)
     
     gde = GDE()
     gde.fit(train_embed)
@@ -145,18 +146,20 @@ def test_GDE_image_level():
     print(int_labels)
     test_labels = torch.tensor(int_labels)
     
-    plot_roc(test_labels, scores, 'bottle')
+    plot_roc(test_labels, scores)
 
+#test_GDE_image_level()
 
 def test_1d_to_2d():
-    x = torch.randn((1,128))
+    x = torch.randn((3249,128))
 
     print(x.shape)
     print(x)
-    x1 = np.resize(np.array(x), (int(np.sqrt(x.shape[1])), int(np.sqrt(x.shape[1]))))
+    x1 = np.resize(np.array(x), (int(np.sqrt(x.shape[0])), int(np.sqrt(x.shape[0]))))
     print(x1.shape)
     print(x1)
 
+#test_1d_to_2d()
 
 def test_gaussian():
     x = [
@@ -179,4 +182,104 @@ def test_gaussian():
     plt.imshow(x1)
     plt.savefig('bho.png')
 
-#test_gaussian()
+
+def test_patch_level():
+    imsize = (256,256)
+    train_img = Image.open('dataset/bottle/test/good/000.png').resize(imsize).convert('RGB')
+    test_img = Image.open('dataset/bottle/test/broken_large/001.png').resize(imsize).convert('RGB') 
+    
+    train_img_tensor = transforms.ToTensor()(train_img)
+    train_img_tensor_norm = transforms.Normalize(
+        (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(train_img_tensor)
+    train_img_tensor_norm = train_img_tensor_norm.unsqueeze(0)
+    
+    test_img_tensor = transforms.ToTensor()(test_img)
+    test_img_tensor_norm = transforms.Normalize(
+        (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(test_img_tensor)
+    test_img_tensor_norm = test_img_tensor_norm.unsqueeze(0)
+    
+    sslm = SSLM().load_from_checkpoint('outputs/computations/bottle/patch_level/best_model.ckpt')
+    sslm.to('cuda')
+    sslm.eval()
+    sslm.unfreeze_layers(False)
+    
+    patches = extract_patches(test_img_tensor_norm, 32, 4)
+    
+    print('inferencing')
+    start = time.time()
+    y_hat, embeddings = sslm(patches.to('cuda'))
+    y_hat = get_prediction_class(y_hat.to('cpu'))
+    print(torch.sum(y_hat)> 0)
+    end = time.time() - start
+    print('done in', end, 'sec')
+    
+    print('getting train embeds')
+    train_patches = extract_patches(train_img_tensor_norm, 32, 4)
+    _, train_embedding = sslm(train_patches.to('cuda'))
+    
+    gde = GDE()
+    gde.fit(train_embedding.to('cpu'))
+    print('predicting')
+    start = time.time()
+    embeddings = embeddings.to('cpu')
+    mvtec_test_scores = gde.predict(embeddings)
+    end = time.time() - start
+    print('done in', end, 'sec')
+    
+    dim = int(np.sqrt(embeddings.shape[0]))
+    out = torch.reshape(mvtec_test_scores, (dim, dim))
+    saliency_map_min, saliency_map_max = out.min(), out.max()
+    out = (out - saliency_map_min).div(saliency_map_max - saliency_map_min).data
+    out[out < 0.35] = 0
+    gs = GaussianSmooth(device='cpu')
+    out = gs.upsample(out[None, None, :])
+    saliency_map_min, saliency_map_max = out.min(), out.max()
+    out = (out - saliency_map_min).div(saliency_map_max - saliency_map_min).data
+
+    heatmap = localize(test_img_tensor[None, :], out)
+    print(heatmap.min(), heatmap.max())
+    image = imagetensor2array(test_img_tensor)
+    print(image.min(), image.max())
+    heatmap = np.uint8(255 * heatmap)
+    image = np.uint8(255 * image)
+    plot_heatmap(image, heatmap)
+test_patch_level()
+
+
+def test_reshape():
+    gt = get_mvtec_gt_filename_counterpart(
+        'dataset/bottle/test/good/000.png', 
+        'dataset/bottle/ground_truth')
+    gt = ground_truth(gt)
+
+    gt = transforms.ToTensor()(gt).unsqueeze(0)
+    print(gt.shape)
+    gt_patches = extract_mask_patches(gt, 32, 4)
+    print(gt_patches.shape)
+    gt_labels = gt2label(gt_patches)
+    print(len(gt_labels))
+    x = torch.randn((4,3,3))
+    print(x)
+    print(x.shape)
+    num_batch, num_patches, embedding_size = x.shape
+    y = torch.reshape(x, (num_patches, num_batch*embedding_size))
+    
+    x1 = x.flatten()
+    x2 = x1.split(embedding_size)
+    start = time.time()
+    for h in range(num_patches):
+        t = torch.tensor([])
+        for i in range(len(x2)):
+            if (i+h)%num_patches == 0:
+                t = torch.cat([t, x2[i]])
+        y[h] = t
+    end = time.time() - start
+    print('done in', end, 'sec')
+    print('')
+    print(y)
+    print(y.shape)
+#test_reshape()
+
+
+
+

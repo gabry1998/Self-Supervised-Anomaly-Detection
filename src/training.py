@@ -8,12 +8,12 @@ import os
 
 def training_pipeline(
         dataset_dir:str, 
-        results_dir:str, 
+        outputs_dir:str, 
         subject:str,
         level:str,
         args:dict=None):
     
-    result_path = results_dir+subject+'/'+level+'/'
+    result_path = outputs_dir
     checkpoint_name = 'best_model.ckpt'
     
     if not os.path.exists(result_path):
@@ -67,7 +67,7 @@ def training_pipeline(
     trainer.fit(pretext_model, datamodule=datamodule)
     
     print('>>> training plot')
-    plot_history(cb.log_metrics, epochs, result_path)
+    plot_history(cb.log_metrics, epochs, result_path, mode='training')
     print('>>> start training (fine tune whole net)')
     pretext_model.lr = 0.001
     pretext_model.num_epochs = 20
@@ -83,11 +83,11 @@ def training_pipeline(
     trainer.fit(pretext_model, datamodule=datamodule)
     trainer.save_checkpoint(result_path+checkpoint_name)
     print('>>> training plot')
-    plot_history(cb.log_metrics, 20, result_path, 'fine_tune')
+    plot_history(cb.log_metrics, 20, result_path, mode='fine_tune')
 
 if __name__ == "__main__":
     dataset_dir = 'dataset/'
-    results_dir = 'outputs/computations/'
+    outputs_dir = 'outputs/computations/'
     
     imsize= (256,256)
     batch_size = 96
@@ -114,7 +114,7 @@ if __name__ == "__main__":
         pbar.set_description('Pipeline Execution | current subject is '+experiments[i][0].upper())
         training_pipeline(
             dataset_dir, 
-            results_dir, 
+            outputs_dir+experiments[i][0]+'/'+experiments[i][1]+'/', 
             experiments[i][0],
             experiments[i][1],
             args)

@@ -20,8 +20,7 @@ class MVTecDataset(Dataset):
             subject:str,
             images_filenames:array,
             imsize:tuple=CONST.DEFAULT_IMSIZE(),
-            transform:Compose=None,
-            patch_localization=False
+            transform:Compose=None
             ) -> None:
         
         super().__init__()
@@ -82,15 +81,13 @@ class MVTecDatamodule(pl.LightningDataModule):
             self.root_dir,
             self.subject,
             self.train_images_filenames,
-            transform=self.transform,
-            patch_localization=False
+            transform=self.transform
         )
         self.test_dataset = MVTecDataset(
             self.root_dir,
             self.subject,
             self.test_images_filenames,
-            transform=self.transform,
-            patch_localization=False
+            transform=self.transform
         )
     
     

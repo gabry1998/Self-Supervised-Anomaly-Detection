@@ -52,25 +52,22 @@ def localization_pipeline(
         prediction_raw, _ = sslm(input_tensor_norm[None, :])
         predicted_class = get_prediction_class(prediction_raw)
         if predicted_class == 0:
-            title = 'good'
             saliency_map = torch.zeros(imsize)[None, None, :]
         else:
-            title = 'defect'
             if predicted_class > 1:
                 predicted_class = 1
             saliency_map = gradcam(input_tensor_norm[None, :], predicted_class)
         heatmap = localize(input_image_tensor[None, :], saliency_map)
         image = imagetensor2array(input_image_tensor)
         gt = imagetensor2array(gt)
-        plot_heatmap(image, heatmap, results_dir=gradcam_dir, name=str(i), title=title)
+        plot_heatmap(image, heatmap, saving_path=gradcam_dir)
         
         plot_heatmap_and_masks(
             image, 
             heatmap, 
             gt, 
             heatmap2mask(saliency_map.squeeze(), threshold=0.75),
-            results_dir=gradcam_dir,
-            name='result '+ str(i))
+            saving_path=gradcam_dir)
         os.system('clear')
       
 

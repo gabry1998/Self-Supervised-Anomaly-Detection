@@ -8,6 +8,7 @@ import self_supervised.metrics as mtr
 def inference_pipeline(
         dataset_dir:str,
         root_dir:str,
+        outputs_dir:str,
         subject:str,
         level:str,
         args:dict=None):
@@ -79,7 +80,7 @@ def inference_pipeline(
     
     print('>>> Printing report')
     df = mtr.report(y=y_artificial, y_hat=y_hat_artificial)
-    df.to_csv(results_dir+'/metric_report.csv', index = False)
+    df.to_csv(outputs_dir+'metric_report.csv', index = False)
 
     print('>>> Inferencing over real mvtec images...')
     x_mvtec, gt_mvtec = next(iter(mvtec.test_dataloader())) 
@@ -100,7 +101,11 @@ def inference_pipeline(
     total_embeddings = torch.cat([embeddings_artificial, embeddings_mvtec])
 
     print('>>> Generating tsne visualization')
-    vis.plot_tsne(total_embeddings, total_y, results_dir, subject)
+    vis.plot_tsne(
+        total_embeddings, 
+        total_y, 
+        saving_path=outputs_dir, 
+        title='Embeddings projection for '+subject.upper())
     
     print('>>> calculating ROC AUC curve..')
     train_embeddings_gde = []
@@ -127,11 +132,13 @@ def inference_pipeline(
     mvtec_test_scores = gde.predict(test_embeddings_gde)
     mvtec_test_labels = gt2label(gt_mvtec_test)
     
-    vis.plot_roc(mvtec_test_labels, mvtec_test_scores, subject, results_dir+'/roc.png')
+    vis.plot_roc(
+        mvtec_test_labels, 
+        mvtec_test_scores, 
+        saving_path=outputs_dir,
+        title='Roc curve for '+subject.upper())
 
 if __name__ == "__main__":
-    dataset_dir = 'dataset/'
-    root_dir = 'outputs/computations/' 
     imsize=(256,256)
     batch_size = 128
     seed = 0
@@ -143,15 +150,16 @@ if __name__ == "__main__":
     }
     
     experiments = [
-        ('grid', 'image_level')
+        ('bottle', 'image_level')
     ]
     
     pbar = tqdm(range(len(experiments)))
     for i in pbar:
         pbar.set_description('Pipeline Execution | current subject is '+experiments[i][0].upper())
         inference_pipeline(
-            dataset_dir, 
-            root_dir, 
+            'dataset/', 
+            'outputs/computations/', 
+            'temp/',
             experiments[i][0],
             experiments[i][1],
             args)
