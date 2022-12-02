@@ -15,7 +15,7 @@ def ground_truth(filename:str=None, imsize=(256,256)):
         return Image.new(mode='1', size=imsize)
 
 
-def get_prediction_class(predictions:Tensor):
+def get_prediction_class(predictions:Tensor) -> Tensor:
     y_hat = torch.max(predictions.data, 1)
     return y_hat.indices
 
@@ -58,20 +58,21 @@ def duplicate_filenames(filenames, baseline=2000):
     return dummy_copy
 
 
-def gt2label(gt_list:Tensor, negative=0, positive=1):
+def gt2label(gt_list:Tensor, negative=0, positive=1) -> list:
     return [negative if torch.sum(x) == 0 else positive for x in gt_list]
 
-def gtpatches2labels(gt_patches:Tensor, negative=0, positive=1):
-    return [negative if torch.sum(x) == 0 else positive for x in gt_patches]
-    
 
-def list2np(images, labels):
+def multiclass2binary(predictions:Tensor) -> Tensor:
+    return torch.tensor([1 if x > 0 else 0 for x in predictions])
+
+
+def list2np(images, labels) -> tuple:
     x = np.array([np.array(a, dtype=np.float32) for a in images])
     y = np.array(labels, dtype=int)
     return x,y
 
 
-def np2tensor(images, labels):
+def np2tensor(images, labels)-> tuple:
     images = torch.as_tensor(images, dtype=torch.float32)
     labels = torch.as_tensor(labels, dtype=int)
     return images,labels
@@ -83,6 +84,7 @@ def imagetensor2array(image_tensor:Tensor):
 
 def heatmap2mask(heatmap, threshold=0.7):
     return heatmap > threshold
+
 
 def extract_patches(image:Tensor, dim=32, stride=4):
     b, c, h, w = image.shape
@@ -101,6 +103,12 @@ def extract_mask_patches(image:Tensor, dim=32, stride=4):
     p, c, h ,w = patches.shape
     patches = patches.reshape(p*c, 1, h, w)
     return patches
+
+
+def normalize(tensor:Tensor):
+    tensor -= tensor.min()
+    tensor /= tensor.max()
+    return tensor
 
 
 class GaussianSmooth:

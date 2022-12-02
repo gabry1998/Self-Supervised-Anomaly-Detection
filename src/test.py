@@ -19,7 +19,7 @@ import math
 import self_supervised.model as md
 import cv2
 from sklearn import preprocessing
-
+import self_supervised.metrics as mtr
 from self_supervised.support.visualization import localize, plot_heatmap, plot_roc
 
 
@@ -243,7 +243,7 @@ def test_patch_level():
     heatmap = np.uint8(255 * heatmap)
     image = np.uint8(255 * image)
     plot_heatmap(image, heatmap)
-test_patch_level()
+#test_patch_level()
 
 
 def test_reshape():
@@ -279,6 +279,54 @@ def test_reshape():
     print(y)
     print(y.shape)
 #test_reshape()
+
+
+def test_metrics():
+    y = torch.tensor([0, 1, 0, 0, 1, 1])
+    y_hat = torch.tensor([0, 1, 0, 0, 0, 1])
+    
+    score = mtr.compute_f1(y, y_hat)
+    print(score)
+    
+    fpr, tpr, _ = mtr.compute_roc(y, y_hat)
+    auc = mtr.compute_auc(fpr, tpr)
+    print(auc)
+    
+    objects = np.array(['bottle', 'grid', 'screw', 'tile'])
+    auc_scores = np.array([0.99, 0.97, 0.86, 0.95])
+    f1_scores = np.array([0.99, 0.98, 0.97, 0.85])
+    metric_dict = {
+        'auc':auc_scores,
+        'f1':f1_scores
+    }
+    report = mtr.metrics_to_dataframe(metric_dict, objects)
+    mtr.export_dataframe(report, saving_path='brutta_copia', name='bho.csv')
+
+
+def test_pixel_level_metrics():
+    gt = get_mvtec_gt_filename_counterpart(
+        'dataset/bottle/test/broken_large/000.png', 
+        'dataset/bottle/ground_truth/')
+    gt = ground_truth(gt)
+
+    gt = transforms.ToTensor()(gt)
+    gt = gt.flatten()
+
+    pred_gt = torch.randn((1,256,256))
+    pred_gt = normalize(pred_gt)
+    mask = heatmap2mask(pred_gt)
+    plt.imshow(mask[0])
+    plt.savefig('brutta_copia/bho.png', bbox_inches='tight')
+    pred_gt = pred_gt.flatten()
+    
+    fpr, tpr, thresholds = mtr.compute_roc(gt, pred_gt)
+    auc = mtr.compute_auc(fpr, tpr)
+    print(auc)
+    f1 = mtr.compute_f1(gt, mask.flatten())
+    print(f1)
+    
+test_pixel_level_metrics()
+
 
 
 

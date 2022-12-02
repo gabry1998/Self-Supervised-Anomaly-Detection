@@ -11,8 +11,19 @@ def training_pipeline(
         outputs_dir:str, 
         subject:str,
         level:str,
-        args:dict=None):
+        patch_type:str='standard',
+        imsize=(256,256),
+        batch_size=96,
+        train_val_split=0.2,
+        seed=0,
+        lr=0.003,
+        epochs=30):
     
+    if patch_type=='deformed':
+        distortion=True
+    else:
+        distortion=False
+        
     result_path = outputs_dir
     checkpoint_name = 'best_model.ckpt'
     
@@ -21,16 +32,12 @@ def training_pipeline(
     
     print('result dir:', result_path)
     print('checkpoint name:', checkpoint_name)
-    
-    imsize = args['imsize']
-    batch_size = args['batch_size']
-    train_val_split = args['train_val_split']
-    seed = args['seed']
-    lr = args['lr']
-    epochs = args['epochs']
-    
+    print('patch type:', patch_type)
+    print('level:', level)
     
     print('>>> preparing datamodule')
+    
+        
     if level == 'image_level':
         datamodule = GenerativeDatamodule(
             dataset_dir+subject+'/',
@@ -39,7 +46,8 @@ def training_pipeline(
             train_val_split=train_val_split,
             seed=seed,
             duplication=True,
-            patch_localization=False
+            patch_localization=False,
+            distortion=distortion
         )
     else:
         datamodule = GenerativeDatamodule(
@@ -49,7 +57,8 @@ def training_pipeline(
             train_val_split=train_val_split,
             seed=seed,
             duplication=True,
-            patch_localization=True
+            patch_localization=True,
+            distortion=distortion
         )
 
     
@@ -86,38 +95,32 @@ def training_pipeline(
     plot_history(cb.log_metrics, 20, result_path, mode='fine_tune')
 
 if __name__ == "__main__":
-    dataset_dir = 'dataset/'
-    outputs_dir = 'outputs/computations/'
-    
-    imsize= (256,256)
-    batch_size = 96
-    train_val_split = 0.2
-    seed = 0
-    lr = 0.003
-    epochs = 30
-    
-    args = {
-        'imsize': imsize,
-        'batch_size': batch_size,
-        'train_val_split': train_val_split,
-        'seed': seed,
-        'lr': lr,
-        'epochs': epochs
-    }
+
     experiments = [
-        ('grid', 'patch_level'),
-        ('grid', 'image_level')
+        ('screw', 'patch_level'),
+        ('screw', 'image_level'),
+        ('tile', 'patch_level'),
+        ('tile', 'image_level'),
+        ('toothbrush', 'patch_level'),
+        ('toothbrush', 'image_level')
         
     ]
+    
     pbar = tqdm(range(len(experiments)))
     for i in pbar:
         pbar.set_description('Pipeline Execution | current subject is '+experiments[i][0].upper())
         training_pipeline(
-            dataset_dir, 
-            outputs_dir+experiments[i][0]+'/'+experiments[i][1]+'/', 
-            experiments[i][0],
-            experiments[i][1],
-            args)
+            dataset_dir='dataset/', 
+            outputs_dir='outputs/computations/'+experiments[i][0]+'/'+experiments[i][1]+'/', 
+            subject=experiments[i][0],
+            level=experiments[i][1],
+            imsize=(256,256),
+            batch_size=96,
+            train_val_split=0.2,
+            seed=0,
+            lr=0.003,
+            epochs=30
+            )
         os.system('clear')
         
         

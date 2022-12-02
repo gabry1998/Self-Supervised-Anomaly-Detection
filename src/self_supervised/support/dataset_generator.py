@@ -17,22 +17,22 @@ class Deformer:
         patch_w  = int(np.sqrt(patch_area*patch_aspect))
         patch_h = int(np.sqrt(patch_area/patch_aspect))
         org_w, org_h = self.img_size
-        self.crop_left, self.crop_top = random.randint(25, (org_w - patch_w)-25), random.randint(25, (org_h - patch_h)-25)
+        self.crop_left, self.crop_top = random.randint(0, (org_w - patch_w)), random.randint(0, (org_h - patch_h))
         self.crop_right, self.crop_bottom = self.crop_left + patch_w, self.crop_top + patch_h
-        self.paste_left, self.paste_top = random.randint(25, (org_w - patch_w)-25), random.randint(25, (org_h - patch_h)-25)
+        self.paste_left, self.paste_top = random.randint(0, (org_w - patch_w)), random.randint(0, (org_h - patch_h))
     def getmesh(self, img):
         return [(
                 # target rectangle
                 (self.crop_left, self.crop_top,self.crop_right, self.crop_bottom),
                 # corresponding source quadrilateral
-                (np.random.randint(25,200), 
-                 np.random.randint(25,200),
-                 np.random.randint(25,200),
-                 np.random.randint(25,200),
-                 np.random.randint(25,200),
-                 np.random.randint(25,200),
-                 np.random.randint(25,200),
-                 np.random.randint(25,200))
+                (np.random.randint(0, self.img_size[0]), 
+                 np.random.randint(0,self.img_size[0]),
+                 np.random.randint(0,self.img_size[0]),
+                 np.random.randint(0,self.img_size[0]),
+                 np.random.randint(0,self.img_size[0]),
+                 np.random.randint(0,self.img_size[0]),
+                 np.random.randint(0,self.img_size[0]),
+                 np.random.randint(0,self.img_size[0]))
                 )]
 
 
