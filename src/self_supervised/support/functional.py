@@ -86,22 +86,18 @@ def heatmap2mask(heatmap, threshold=0.7):
     return heatmap > threshold
 
 
-def extract_patches(image:Tensor, dim=32, stride=4):
-    b, c, h, w = image.shape
+def extract_mask_patches(image:Tensor, dim=32, stride=4):
     patches = image.unfold(2, dim, stride).unfold(3, dim, stride)
-    patches = patches.reshape(1, 3, -1, dim, dim)
-    patches = patches.squeeze()
-    patches = torch.permute(patches, (1,0,2,3))
+    patches = patches.reshape(-1,1, dim, dim)
+    #patches = patches.squeeze()
     return patches
 
 
-def extract_mask_patches(image:Tensor, dim=32, stride=4):
+def extract_patches(image:Tensor, dim=32, stride=4):
     patches = image.unfold(2, dim, stride).unfold(3, dim, stride)
     patches = patches.reshape(1, 3, -1, dim, dim)
     patches = patches.squeeze()
     patches = torch.permute(patches, (1,0,2,3))
-    p, c, h ,w = patches.shape
-    patches = patches.reshape(p*c, 1, h, w)
     return patches
 
 

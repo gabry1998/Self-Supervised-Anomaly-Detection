@@ -324,10 +324,36 @@ def test_pixel_level_metrics():
     print(auc)
     f1 = mtr.compute_f1(gt, mask.flatten())
     print(f1)
-    
-test_pixel_level_metrics()
 
 
+def other_tests():
+    gt = get_mvtec_gt_filename_counterpart(
+        'dataset/bottle/test/broken_large/000.png', 
+        'dataset/bottle/ground_truth/')
+    gt = ground_truth(gt)
+
+    gt = transforms.ToTensor()(gt)[None, :]
+    gt_patches = extract_mask_patches(gt, 32,4)
+    patches_labels = torch.tensor(gt2label(gt_patches))
+
+    patches_scores = torch.randn(57*57)
+    dim = int(np.sqrt(patches_scores.shape[0]))
+    predictions = normalize(patches_scores)
+
+    print(patches_labels.shape)
+    print(patches_scores.shape)
+
+    fpr, tpr, thresholds = mtr.compute_roc(patches_labels, patches_scores)
+    auc = mtr.compute_auc(fpr, tpr)
+    print(auc)  
+#test_pixel_level_metrics()
 
 
-
+x = torch.randn(1,3,2)
+x1 = torch.randn(1,3,2)
+print(x)
+print(x1)
+print(x.shape)
+y = torch.cat([x, x1], dim=1)
+print(y.shape)
+print(y)

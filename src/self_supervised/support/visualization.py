@@ -43,13 +43,10 @@ def plot_history(network_history, epochs, saving_path=None, mode='training'):
     plt.show()
     plt.close()
 
-def plot_roc(labels:Tensor, scores:Tensor, saving_path:str=None, title:str='', name:str='roc.png'):
+def plot_roc(fpr, tpr, roc_auc, saving_path:str=None, title:str='', name:str='roc.png'):
     if saving_path and not os.path.exists(saving_path):
         os.makedirs(saving_path)
         
-    fpr, tpr, _ = roc_curve(labels, scores)
-    roc_auc = auc(fpr, tpr)
-
     #plot roc
     plt.figure()
     lw = 2
@@ -100,7 +97,7 @@ def plot_heatmap(image, heatmap, saving_path:str=None, name:str='gradcam.png'):
     if saving_path and not os.path.exists(saving_path):
         os.makedirs(saving_path)
     
-    fig, axs = plt.subplots(1,2)
+    fig, axs = plt.subplots(1,2, figsize=(16,16))
     
     axs[0].axis('off')
     axs[0].set_title('original')
@@ -128,7 +125,7 @@ def plot_heatmap_and_masks(
     if saving_path and not os.path.exists(saving_path):
         os.makedirs(saving_path)
     
-    fig, axs = plt.subplots(1,4)
+    fig, axs = plt.subplots(1,4, figsize=(16,16))
     
     axs[0].axis('off')
     axs[0].set_title('original')

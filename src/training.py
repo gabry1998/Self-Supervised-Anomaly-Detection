@@ -11,18 +11,13 @@ def training_pipeline(
         outputs_dir:str, 
         subject:str,
         level:str,
-        patch_type:str='standard',
+        distortion=False,
         imsize=(256,256),
         batch_size=96,
         train_val_split=0.2,
         seed=0,
         lr=0.003,
         epochs=30):
-    
-    if patch_type=='deformed':
-        distortion=True
-    else:
-        distortion=False
         
     result_path = outputs_dir
     checkpoint_name = 'best_model.ckpt'
@@ -32,7 +27,7 @@ def training_pipeline(
     
     print('result dir:', result_path)
     print('checkpoint name:', checkpoint_name)
-    print('patch type:', patch_type)
+    print('distortion:', distortion)
     print('level:', level)
     
     print('>>> preparing datamodule')
@@ -97,13 +92,11 @@ def training_pipeline(
 if __name__ == "__main__":
 
     experiments = [
-        ('screw', 'patch_level'),
+        ('bottle', 'image_level'),
+        ('grid', 'image_level'),
         ('screw', 'image_level'),
-        ('tile', 'patch_level'),
         ('tile', 'image_level'),
-        ('toothbrush', 'patch_level'),
         ('toothbrush', 'image_level')
-        
     ]
     
     pbar = tqdm(range(len(experiments)))
@@ -111,9 +104,10 @@ if __name__ == "__main__":
         pbar.set_description('Pipeline Execution | current subject is '+experiments[i][0].upper())
         training_pipeline(
             dataset_dir='dataset/', 
-            outputs_dir='outputs/computations/'+experiments[i][0]+'/'+experiments[i][1]+'/', 
+            outputs_dir='brutta_copia/bho/computations/'+experiments[i][0]+'/'+experiments[i][1]+'/', 
             subject=experiments[i][0],
             level=experiments[i][1],
+            distortion=False,
             imsize=(256,256),
             batch_size=96,
             train_val_split=0.2,

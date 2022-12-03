@@ -119,6 +119,33 @@ def generate_scar(imsize:tuple, w_range=(2,16), h_range=(10,25)):
     return scar, (left, top)
 
 
+def generate_scar_new(image, w_range=(2,16), h_range=(10,25), augs=None):
+    img_w, img_h = image.size
+    right = 1
+    left = 1
+    top = 1
+    bottom = 1
+
+    scar_w = random.randint(w_range[0], w_range[1])
+    scar_h = random.randint(h_range[0], h_range[1])
+    new_width = scar_w + right + left
+    new_height = scar_h + top + bottom
+    patch_left, patch_top = random.randint(0, img_w - scar_w), random.randint(0, img_h - scar_h)
+    patch_right, patch_bottom = patch_left + scar_w, patch_top + scar_h
+    
+    scar = image.crop((patch_left, patch_top, patch_right, patch_bottom))
+    scar_with_pad = Image.new(image.mode, (new_width, new_height), (255, 255, 255))
+    scar = apply_jittering(scar, augs)
+    scar_with_pad.paste(scar, (left, top))
+    scar = scar_with_pad.convert('RGBA')
+    angle = random.randint(-45, 45)
+    scar = scar.rotate(angle, expand=True)
+
+    #posizione casuale della sezione
+    left, top = random.randint(0, img_w - scar_w), random.randint(0, img_h - scar_h)
+    return scar, (left, top)
+
+
 def generate_dataset(
         dataset_dir:str, 
         imsize=(256,256),

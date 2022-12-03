@@ -170,7 +170,7 @@ class GenerativeDataset(Dataset):
             x = paste_patch(x, patch, coords)
             return x
         if y == 2:
-            patch, coords = generate_scar(x.size, self.scar_width, self.scar_thiccness)
+            patch, coords = generate_scar_new(x, self.scar_width, self.scar_thiccness, CPP.jitter_transforms)
             x = paste_patch(x, patch, coords, patch)
             return x
 
