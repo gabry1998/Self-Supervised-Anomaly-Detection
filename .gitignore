@@ -11,6 +11,7 @@ mvtec/
 dataset/
 lightning_logs/
 temp/
+src/mvtec_ad_evaluation/
 src/test.py
 best_model.ckpt
 memes/
