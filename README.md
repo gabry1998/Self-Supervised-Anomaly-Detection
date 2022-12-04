@@ -22,7 +22,7 @@ This SSL approach is inspired by [CutPaste: Self-Supervised Learning for Anomaly
 The goal is to generate artificial anomalies and train the model to recognize those representations for the downstream task (Anomaly detection)
 
 The dataset used is the MVTec dataset, widely used for anomaly detection benchmark.<br />
-The personal contribution aims to create a Generative Dataset in the Pretext Task, where the dataset is re-generated every N training epochs. This choice is jusyfied by the fact the training images for each MVTec object class are very few (especially the toothbrush one). This choice should avoid the overfit problem (at least partially) and bring more generalization to the model
+The personal contribution aims to create a variant of cutpaste approach, where instead of only cutting and pasting a rectangle over the image, we also create a binary mask of a random polygon and overlap the patch over the mask during the paste phase, to obtain an image with a polygonal shaped patch. The goal is to create a realistic approximation of real defects
 
 ## Pretext Task
 The pretext task is considered a supervised classification task in such a way the dataset is labeled in 3 classes:
@@ -54,7 +54,7 @@ Those augmentations are only applied to the artificial anomalies (cutpaste patch
 The images labeled as '0' are augmentation-free. <br />
 All images have size (256,256) and are randomly rotated from a selection of [0, 90, 180, 270] degrees.
 
-### CutPaste Approach Example
+### CutPaste (with polygon) Approach Example
 
 <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/dataset_analysis/screw/screw_artificial.png"/>
 
@@ -84,27 +84,26 @@ The network is trained two times, first with imagenet weights frozen, then finet
 
 | bottle example |
 | :--: |
-| <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/readme_images/bottle.png" width="256" height="256"/> |
+| <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/dataset_analysis/bottle/000.png" width="256" height="256"/> |
 
 | t-SNE | ROC |
 | :--: | :--: |
 | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/bottle/image_level/tsne.png"/> | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/bottle/image_level/roc.png"/>|
 
-|  Localization |  Heatmap  |
-| :--:          | :---------:  |
-| Image Level   | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/bottle/image_level/gradcam/2.png"/> |
+Gradcam example (Image Level Localization)
+<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/bottle/image_level/gradcam/heatmap_and_masks_2.png"/>
 
 #### Texture (GRID)
 | grid example |
 | :--: |
-|<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/readme_images/grid.png" width="256" height="256"/> |
+|<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/dataset_analysis/grid/000.png" width="256" height="256"/> |
 
 |t-SNE| ROC |
 | :--: | :--: |
 | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/grid/image_level/tsne.png"/> | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/grid/image_level/roc.png"/> |
 
-|  Localization |  Heatmap  |
-| :--:          | :---------:  |
-| Image Level   | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/grid/image_level/gradcam/0.png"/> |
+Gradcam example (Image Level Localization)
+<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/grid/image_level/gradcam/heatmap_and_masks_0.png"/>
+
 #### Explanation
 Textures defects are very hard to identify because of homogeneous patterns. Still, in the example we have an almost perfect scenario in BOTTLES, thanks to (assuming) easy object recognition in the images and his defects (real and artificial). In GRID we can see scars (2) isolated from the rest of classes, thanks to peculiarity of that defect (its literally a colored line over a homogeneous image). To improve Texture defect recognition we can apply more image augmentation, for example contrast, brightness, sharpening, etc to emphatize more the defect over the whole image and give the model a easier job.
