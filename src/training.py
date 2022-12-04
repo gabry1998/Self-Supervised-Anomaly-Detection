@@ -12,7 +12,8 @@ def get_trainer(stopping_threshold, epochs, reload_dataloaders_every_n_epochs):
     early_stopping = EarlyStopping(
         monitor="val_accuracy",
         stopping_threshold=stopping_threshold,
-        mode='max'
+        mode='max',
+        patience=5
     )
     trainer = pl.Trainer(
         callbacks= [cb, early_stopping],
@@ -62,7 +63,7 @@ def training_pipeline(
     
     print('>>> setting up the model')
     pretext_model = SSLM(num_epochs=epochs, lr=lr)
-    trainer, cb = get_trainer(0.92, epochs, 10)
+    trainer, cb = get_trainer(0.90, epochs, 15)
     print('>>> start training (training projection head)')
     trainer.fit(pretext_model, datamodule=datamodule)
     print('>>> training plot')
@@ -72,7 +73,7 @@ def training_pipeline(
     pretext_model.lr = 0.001
     pretext_model.num_epochs = 20
     pretext_model.unfreeze_layers(True)
-    trainer, cb = get_trainer(0.98, 20, 20)
+    trainer, cb = get_trainer(0.95, 20, 20)
     print('>>> start training (fine tune whole net)') 
     trainer.fit(pretext_model, datamodule=datamodule)
     trainer.save_checkpoint(result_path+checkpoint_name)
@@ -82,6 +83,12 @@ def training_pipeline(
 if __name__ == "__main__":
 
     experiments = get_all_subject_experiments('dataset/', patch_localization=False)
+    #experiments = [
+    #    ('bottle', False),
+    #    ('cable', False),
+    #    ('grid', False),
+    #    ('toothbrush', False)
+    #]
     
     pbar = tqdm(range(len(experiments)))
     for i in pbar:

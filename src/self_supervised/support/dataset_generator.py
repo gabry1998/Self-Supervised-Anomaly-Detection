@@ -136,7 +136,7 @@ def generate_scar(imsize:tuple, w_range=(2,16), h_range=(10,25)):
     return scar, (left, top)
 
 
-def generate_scar_new(image, w_range=(2,16), h_range=(10,25), augs=None):
+def generate_scar_new(image, w_range=(2,16), h_range=(10,25), augs=None, with_padding=False):
     img_w, img_h = image.size
     right = 1
     left = 1
@@ -151,9 +151,14 @@ def generate_scar_new(image, w_range=(2,16), h_range=(10,25), augs=None):
     patch_right, patch_bottom = patch_left + scar_w, patch_top + scar_h
     
     scar = image.crop((patch_left, patch_top, patch_right, patch_bottom))
-    scar_with_pad = Image.new(image.mode, (new_width, new_height), (255, 255, 255))
-    scar = apply_jittering(scar, augs)
-    scar_with_pad.paste(scar, (left, top))
+    if with_padding:
+        scar_with_pad = Image.new(image.mode, (new_width, new_height), (255, 255, 255))
+        scar = apply_jittering(scar, augs)
+        scar_with_pad.paste(scar, (left, top))
+    else:
+        scar_with_pad = Image.new(image.mode, (scar_w, scar_h), (255, 255, 255))
+        scar = apply_jittering(scar, augs)
+        scar_with_pad.paste(scar, (0, 0))
     scar = scar_with_pad.convert('RGBA')
     angle = random.randint(-45, 45)
     scar = scar.rotate(angle, expand=True)

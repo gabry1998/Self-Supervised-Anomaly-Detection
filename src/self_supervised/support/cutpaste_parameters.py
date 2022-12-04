@@ -5,7 +5,8 @@ class CPP:
     cutpaste_augmentations = {
         'jitter_offset': 0.3,
         'patch':{
-            'area_ratio': (0.02, 0.15),
+            #'area_ratio': (0.02, 0.15),
+            'area_ratio':(0.15, 0.30),
             'aspect_ratio': ((0.3, 1),(1, 3.3))
         },
         'scar':{

@@ -137,7 +137,7 @@ def localization_pipeline(
         patch_localization(mvtec, model_dir, gradcam_dir, seed)
 
 def pipeline():
-    root_outputs_dir='brutta_copia/computations/'
+    root_outputs_dir='outputs/computations/'
     experiments = get_all_subject_experiments('dataset/', patch_localization=False)
     level = 'patch_level'
     pbar = tqdm(range(len(experiments)))
@@ -153,7 +153,7 @@ def pipeline():
         
         localization_pipeline(
             dataset_dir='dataset/', 
-            root_inputs_dir='brutta_copia/computations/',
+            root_inputs_dir='outputs/computations/',
             root_outputs_dir=root_outputs_dir,
             subject=subject,
             level=level,

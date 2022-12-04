@@ -72,9 +72,9 @@ def inference_pipeline(
         sslm, 
         x_artificial)
     
-    print('>>> Printing report')
-    df = mtr.report(y=y_artificial, y_hat=y_hat_artificial)
-    mtr.export_dataframe(df, saving_path=outputs_dir)
+    #print('>>> Printing report')
+    #df = mtr.report(y=y_artificial, y_hat=y_hat_artificial)
+    #mtr.export_dataframe(df, saving_path=outputs_dir)
 
     print('>>> Inferencing over real mvtec images...')
     x_mvtec, gt_mvtec = next(iter(mvtec.test_dataloader())) 
@@ -132,6 +132,13 @@ if __name__ == "__main__":
     
     experiments = get_all_subject_experiments('dataset/', patch_localization=False)
     
+    #experiments = [
+    #    ('bottle', False),
+    #    ('cable', False),
+    #    ('grid', False),
+    #    ('toothbrush', False)
+    #]
+    
     pbar = tqdm(range(len(experiments)))
     metric_dict = {}
     
@@ -154,8 +161,12 @@ if __name__ == "__main__":
         auc_scores_img_lvl.append(auc_score)
         f1_scores_img_lvl.append(f_score)
         os.system('clear')
-    metric_dict['auc (image level)'] = np.array(auc_scores_img_lvl)
-    metric_dict['f1 (image level)'] = np.array(f1_scores_img_lvl)
-
+    experiments.append(('average', False))
+    metric_dict['auc (image level)'] = np.append(
+        auc_scores_img_lvl, 
+        np.mean(auc_scores_img_lvl))
+    metric_dict['f1 (image level)'] = np.append(
+        f1_scores_img_lvl, 
+        np.mean(f1_scores_img_lvl))
     report = mtr.metrics_to_dataframe(metric_dict, np.array([x[0] for x in experiments]))
-    mtr.export_dataframe(report, saving_path=root_outputs_dir, name='roc_and_f1_scores.csv')
+    mtr.export_dataframe(report, saving_path=root_outputs_dir, name='roc_and_f1.csv')
