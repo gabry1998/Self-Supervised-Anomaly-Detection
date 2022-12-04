@@ -106,4 +106,4 @@ Gradcam example (Image Level Localization)
 <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/grid/image_level/gradcam/heatmap_and_masks_0.png"/>
 
 #### Explanation
-Textures defects are very hard to identify because of homogeneous patterns. Still, in the example we have an almost perfect scenario in BOTTLES, thanks to (assuming) easy object recognition in the images and his defects (real and artificial). In GRID we can see scars (2) isolated from the rest of classes, thanks to peculiarity of that defect (its literally a colored line over a homogeneous image). To improve Texture defect recognition we can apply more image augmentation, for example contrast, brightness, sharpening, etc to emphatize more the defect over the whole image and give the model a easier job.
+In the example we have an almost perfect scenario in BOTTLES, and the real defect (purple) are in the same region as artificial defects. In GRID we can see a more sparse distribution, caused by the homogeneous patterns in images and small defects hard to localize, still, we can see real defect overlapped on scars and polygon patches
