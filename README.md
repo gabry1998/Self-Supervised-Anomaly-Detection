@@ -33,11 +33,11 @@ The pretext task is considered a supervised classification task in such a way th
 First the labels are generated, then the respective image transformations are applied.
 
 ### Image Parameters
-Following the paper values, we have:
+(some are not equals to the paper's ones)
 
 |                   | Area Ratio    | Aspect Ratio       |
 | :---------------: | :-----------: | :----------------: |
-| CutPaste          | (0.02, 0.15)  | (0.3, 1) U (1, 3.3)|
+| CutPaste          | (0.15, 0.30)  | (0.3, 1) U (1, 3.3)|
 
 |         | Width   | Height | Rotations |
 | :-----: | :-----: | :----: | :-------: |
