@@ -25,11 +25,13 @@ def inference_pipeline(
         root_outputs_dir:str,
         subject:str,
         distortion:bool=False,
+        patch_localization=False,
         seed:int=CONST.DEFAULT_SEED(),
         batch_size:int=CONST.DEFAULT_BATCH_SIZE(),
         imsize:int=CONST.DEFAULT_IMSIZE()):
     
-    
+    np.random.seed(seed)
+    random.seed(seed)
     model_dir = root_inputs_dir+subject+'/image_level/'+'best_model.ckpt'
     print(model_dir)
     outputs_dir = root_outputs_dir+subject+'/image_level/'
@@ -49,7 +51,7 @@ def inference_pipeline(
         seed=seed,
         duplication=True,
         min_dataset_length=500,
-        patch_localization=False,
+        patch_localization=patch_localization,
         distortion=distortion
     )
     artificial.setup('test')
@@ -126,26 +128,27 @@ def inference_pipeline(
     return auc_score, f_score
 
 if __name__ == "__main__":
-    root_outputs_dir='brutta_copia/bho/computations/'
-    experiments = np.array([
-        'bottle',
-        'grid',
-        'screw',
-        'tile',
-        'toothbrush'
-    ])
+    root_outputs_dir='brutta_copia/computations/'
+    
+    experiments = get_all_subject_experiments('dataset/', patch_localization=False)
+    
     pbar = tqdm(range(len(experiments)))
     metric_dict = {}
     
     auc_scores_img_lvl = []
     f1_scores_img_lvl = []
     for i in pbar:
-        pbar.set_description('Pipeline Execution image level | current subject is '+experiments[i].upper())
+        pbar.set_description('Pipeline Execution image level | current subject is '+experiments[i][0].upper())
+        subject = experiments[i][0]
+        patch_localization = experiments[i][1]
+        
         auc_score, f_score = inference_pipeline(
             dataset_dir='dataset/', 
-            root_inputs_dir='brutta_copia/bho/computations/',
+            root_inputs_dir='brutta_copia/computations/',
             root_outputs_dir=root_outputs_dir,
-            subject=experiments[i],
+            subject=subject,
+            patch_localization=patch_localization,
+            distortion=False,
             batch_size=128,
             imsize=(256,256))
         auc_scores_img_lvl.append(auc_score)
@@ -154,5 +157,5 @@ if __name__ == "__main__":
     metric_dict['auc (image level)'] = np.array(auc_scores_img_lvl)
     metric_dict['f1 (image level)'] = np.array(f1_scores_img_lvl)
 
-    report = mtr.metrics_to_dataframe(metric_dict, experiments)
+    report = mtr.metrics_to_dataframe(metric_dict, np.array([x[0] for x in experiments]))
     mtr.export_dataframe(report, saving_path=root_outputs_dir, name='roc_and_f1_scores.csv')

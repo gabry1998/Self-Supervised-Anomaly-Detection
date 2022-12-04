@@ -8,6 +8,12 @@ from scipy import signal
 import torch.nn.functional as F
 
 
+
+def get_all_subject_experiments(dataset_dir:str, patch_localization:bool=False):
+    return sorted([(name, patch_localization) for name in os.listdir(dataset_dir) if os.path.isdir(
+                        dataset_dir+name)
+                    ])
+
 def ground_truth(filename:str=None, imsize=(256,256)):
     if filename:
         return Image.open(filename).resize(imsize).convert('1')

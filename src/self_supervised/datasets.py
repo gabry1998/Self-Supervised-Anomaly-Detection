@@ -115,6 +115,7 @@ class GenerativeDataset(Dataset):
             imsize=CONST.DEFAULT_IMSIZE(),
             transform=None,
             distortion=False,
+            polygons = True,
             patch_localization=False,
             patch_size:tuple=CONST.DEFAULT_PATCH_SIZE()) -> None:
 
@@ -130,6 +131,7 @@ class GenerativeDataset(Dataset):
         self.distortion = distortion
         self.patch_localization = patch_localization
         self.patch_size = patch_size
+        self.polygoned = polygons
         
         self.labels = self.generate_labels()
 
@@ -142,6 +144,7 @@ class GenerativeDataset(Dataset):
     def __getitem__(self, index):
         x = self.images_filenames[index]
         y = self.labels[index]
+        #y = random.randint(0, 2)
         
         x = self.generate_cutpaste_3way(x, y)
         
@@ -165,9 +168,9 @@ class GenerativeDataset(Dataset):
             if self.distortion:
                 patch, coords = generate_patch_distorted(x, self.area_ratio, self.aspect_ratio)
             else:
-                patch, coords = generate_patch(x, self.area_ratio, self.aspect_ratio)
+                patch, mask, coords = generate_patch(x, self.area_ratio, self.aspect_ratio, self.polygoned)
             patch = apply_jittering(patch, CPP.jitter_transforms)
-            x = paste_patch(x, patch, coords)
+            x = paste_patch(x, patch, coords, mask)
             return x
         if y == 2:
             patch, coords = generate_scar_new(x, self.scar_width, self.scar_thiccness, CPP.jitter_transforms)
@@ -241,6 +244,7 @@ class GenerativeDatamodule(pl.LightningDataModule):
     
     def setup(self, stage:str=None) -> None:
         if stage == 'fit' or stage is None:
+            
             self.val_dataset = GenerativeDataset(
                 self.val_images_filenames,
                 imsize=self.imsize,

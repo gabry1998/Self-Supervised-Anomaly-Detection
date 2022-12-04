@@ -18,12 +18,13 @@ def plot_history(network_history, epochs, saving_path=None, mode='training'):
     if saving_path and not os.path.exists(saving_path):
         os.makedirs(saving_path)
         
-    x_plot = list(range(1,epochs+1))
+    x_plot = list(range(1,len(network_history['train']['loss'])+1))
+    x_plot_val = list(range(1,len(network_history['val']['loss'])+1))
     plt.figure()
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.plot(x_plot, network_history['train']['loss'])
-    plt.plot(x_plot, network_history['val']['loss'])
+    plt.plot(x_plot_val, network_history['val']['loss'])
     plt.legend(['Training', 'Validation'])
     if saving_path:
         plt.savefig(saving_path+mode+'_loss.png')
@@ -34,7 +35,7 @@ def plot_history(network_history, epochs, saving_path=None, mode='training'):
     plt.xlabel('Epochs')
     plt.ylabel('Accuracy')
     plt.plot(x_plot, network_history['train']['accuracy'])
-    plt.plot(x_plot, network_history['val']['accuracy'])
+    plt.plot(x_plot_val, network_history['val']['accuracy'])
     plt.legend(['Training', 'Validation'], loc='lower right')
     if saving_path:
         plt.savefig(saving_path+mode+'_accuracy.png')

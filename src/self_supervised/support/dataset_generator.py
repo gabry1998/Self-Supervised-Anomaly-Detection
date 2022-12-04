@@ -1,5 +1,5 @@
 import random
-from PIL import Image, ImageFilter, ImageOps
+from PIL import Image, ImageFilter, ImageOps, ImageDraw
 import numpy as np
 from .cutpaste_parameters import CPP
 from .functional import get_image_filenames, duplicate_filenames
@@ -48,6 +48,13 @@ def generate_rotation(image):
     return image.rotate(rotation)
 
 
+def get_random_points(width, height, num_points=3):
+    points = []
+    for _ in range(num_points):
+        points.append((random.randint(0, width), random.randint(0, height)))
+    return points
+
+
 def generate_patch_distorted(
         image, 
         area_ratio=(0.02, 0.15),
@@ -62,7 +69,8 @@ def generate_patch_distorted(
 def generate_patch(
         image, 
         area_ratio=(0.02, 0.15), 
-        aspect_ratio=((0.3, 1),(1, 3.3))):
+        aspect_ratio=((0.3, 1),(1, 3.3)),
+        polygoned=True):
 
     #print('generate_patch', area_ratio)
     img_area = image.size[0] * image.size[1]
@@ -76,7 +84,16 @@ def generate_patch(
     patch_right, patch_bottom = patch_left + patch_w, patch_top + patch_h
     paste_left, paste_top = random.randint(0, org_w - patch_w), random.randint(0, org_h - patch_h)
 
-    return image.crop((patch_left, patch_top, patch_right, patch_bottom)), (paste_left, paste_top)
+    mask = None
+    if polygoned:
+        mask = Image.new('RGBA', (patch_w, patch_h), (0, 0, 0, 0)) 
+        draw = ImageDraw.Draw(mask)
+            
+        points = get_random_points(mask.size[0], mask.size[1], random.randint(3,5))
+        
+        draw.polygon(points, fill='white')
+    
+    return image.crop((patch_left, patch_top, patch_right, patch_bottom)), mask, (paste_left, paste_top)
 
 
 def paste_patch(image, patch, coords, mask=None):

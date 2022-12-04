@@ -349,11 +349,5 @@ def other_tests():
 #test_pixel_level_metrics()
 
 
-x = torch.randn(1,3,2)
-x1 = torch.randn(1,3,2)
+x = sorted(get_all_subject_experiments('dataset/', patch_localization=False))
 print(x)
-print(x1)
-print(x.shape)
-y = torch.cat([x, x1], dim=1)
-print(y.shape)
-print(y)

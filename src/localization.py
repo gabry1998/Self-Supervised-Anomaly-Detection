@@ -18,12 +18,11 @@ def image_localization(mvtec, model_dir, gradcam_dir, seed):
     sslm = md.SSLM.load_from_checkpoint(
     model_dir)
     sslm.eval()
-    
     gradcam = GradCam(
         md.SSLM.load_from_checkpoint(model_dir).model)
     j = len(mvtec.test_dataset)-1
-    random.seed(seed)
-    for i in tqdm(range(5), desc='localizing defects'):
+    
+    for i in tqdm(range(3), desc='localizing defects'):
         input_image_tensor, gt = mvtec.test_dataset[random.randint(0, j)]
         input_tensor_norm = transforms.Normalize(
             (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(input_image_tensor)
@@ -39,7 +38,7 @@ def image_localization(mvtec, model_dir, gradcam_dir, seed):
         heatmap = localize(input_image_tensor[None, :], saliency_map)
         image = imagetensor2array(input_image_tensor)
         gt = imagetensor2array(gt)
-        plot_heatmap(image, heatmap, saving_path=gradcam_dir, name='heatmap_'+str(i)+'.png')
+        #plot_heatmap(image, heatmap, saving_path=gradcam_dir, name='heatmap_'+str(i)+'.png')
         
         plot_heatmap_and_masks(
             image, 
@@ -59,7 +58,7 @@ def patch_localization(mvtec, model_dir, gradcam_dir, seed):
     sslm.unfreeze_layers(False)
     
     train_embeddings_gde = []
-    for i in range(5):
+    for i in range(3):
         train_img_tensor, _ = mvtec.train_dataloader().dataset.__getitem__(i)
         train_img_tensor_norm = transforms.Normalize(
             (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(train_img_tensor)
@@ -73,7 +72,7 @@ def patch_localization(mvtec, model_dir, gradcam_dir, seed):
     gde.fit(train_embedding)
     j = len(mvtec.test_dataset)-1
     random.seed(seed)
-    for i in tqdm(range(5), desc='localizing defects'):
+    for i in tqdm(range(3), desc='localizing defects'):
         input_image_tensor, gt = mvtec.test_dataset[random.randint(0, j)]
         input_tensor_norm = transforms.Normalize(
             (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(input_image_tensor)
@@ -95,7 +94,7 @@ def patch_localization(mvtec, model_dir, gradcam_dir, seed):
         image = imagetensor2array(input_image_tensor)
         heatmap = np.uint8(255 * heatmap)
         image = np.uint8(255 * image)
-        plot_heatmap(image, heatmap, saving_path=gradcam_dir, name='heatmap_'+str(i)+'.png')
+        #plot_heatmap(image, heatmap, saving_path=gradcam_dir, name='heatmap_'+str(i)+'.png')
         gt = imagetensor2array(gt)
         plot_heatmap_and_masks(
             image, 
@@ -115,6 +114,8 @@ def localization_pipeline(
         level:str,
         seed=CONST.DEFAULT_SEED()):
     
+    random.seed(seed)
+    np.random.seed(seed)
     imsize = CONST.DEFAULT_IMSIZE()
     batch_size = CONST.DEFAULT_BATCH_SIZE()
     gradcam_dir = root_outputs_dir+subject+'/'+level+'/gradcam/'
@@ -136,25 +137,27 @@ def localization_pipeline(
         patch_localization(mvtec, model_dir, gradcam_dir, seed)
 
 def pipeline():
-    root_outputs_dir='brutta_copia/bho/'
-    experiments = np.array([
-        'bottle',
-        'grid',
-        'tile',
-        'toothbrush',
-        'screw'
-    ])
+    root_outputs_dir='brutta_copia/computations/'
+    experiments = get_all_subject_experiments('dataset/', patch_localization=False)
     level = 'patch_level'
     pbar = tqdm(range(len(experiments)))
     for i in pbar:
-        pbar.set_description('Pipeline Execution '+level+' | current subject is '+experiments[i].upper())
+        pbar.set_description('Pipeline Execution '+level+' | current subject is '+experiments[i][0].upper())
+        
+        subject = experiments[i][0]
+        patch_localization = experiments[i][1]
+        if patch_localization:
+            level = 'patch_level'
+        else:
+            level = 'image_level'
+        
         localization_pipeline(
             dataset_dir='dataset/', 
-            root_inputs_dir='outputs/computations/',
+            root_inputs_dir='brutta_copia/computations/',
             root_outputs_dir=root_outputs_dir,
-            subject=experiments[i],
+            subject=subject,
             level=level,
-            seed=1
+            seed=0
         )
         os.system('clear')
 
