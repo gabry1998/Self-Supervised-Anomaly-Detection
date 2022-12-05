@@ -82,10 +82,6 @@ The network is trained two times, first with imagenet weights frozen, then finet
 
 #### Object (BOTTLES)
 
-| bottle example |
-| :--: |
-| <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/dataset_analysis/bottle/000.png" width="256" height="256"/> |
-
 | t-SNE | ROC |
 | :--: | :--: |
 | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/bottle/image_level/tsne.png"/> | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/bottle/image_level/roc.png"/>|
@@ -94,9 +90,6 @@ Gradcam example (Image Level Localization)
 <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/bottle/image_level/gradcam/heatmap_and_masks_2.png"/>
 
 #### Texture (GRID)
-| grid example |
-| :--: |
-|<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/dataset_analysis/grid/000.png" width="256" height="256"/> |
 
 |t-SNE| ROC |
 | :--: | :--: |
