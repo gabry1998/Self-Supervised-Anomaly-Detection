@@ -165,11 +165,7 @@ class GenerativeDataset(Dataset):
         if y == 0:
             return x
         if y == 1:
-            x = generate_rotation(x)
-            #if self.distortion:
-            #    patch, coords = generate_patch_distorted(x, self.area_ratio, self.aspect_ratio)
-            #else:
-            #    patch, mask, coords = generate_patch(x, self.area_ratio, self.aspect_ratio, self.polygoned)
+            #x = generate_rotation(x)
             patch, mask, coords = generate_patch(
                 image=x, 
                 area_ratio=self.area_ratio, 
@@ -180,8 +176,13 @@ class GenerativeDataset(Dataset):
             x = paste_patch(x, patch, coords, mask)
             return x
         if y == 2:
-            x = generate_rotation(x)
-            patch, coords = generate_scar_new(x, self.scar_width, self.scar_thiccness, CPP.jitter_transforms)
+            #x = generate_rotation(x)
+            patch, coords = generate_scar_new(
+                x, 
+                self.scar_width, 
+                self.scar_thiccness, 
+                CPP.jitter_transforms,
+                with_padding=True)
             x = paste_patch(x, patch, coords, patch)
             return x
 

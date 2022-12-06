@@ -70,7 +70,6 @@ def generate_patch(
         mask = Image.new('RGBA', (patch_w, patch_h), (255,255,255,0)) 
         draw = ImageDraw.Draw(mask)
             
-        #points = get_random_points(mask.size[0], mask.size[1], random.randint(3,5))
         raw_points = 0.1 + 0.8*np.random.rand(random.randint(3,15), 2)
         ch = ConvexHull(raw_points)
         hull_indices = ch.vertices

@@ -267,12 +267,17 @@ if __name__ == "__main__":
     run(
         experiments_list=experiments,
         dataset_dir='dataset/',
-        root_inputs_dir='brutta_copia/computations/',
-        root_outputs_dir='brutta_copia/computations/',
-        num_experiments_for_each_subject=1,
-        seed_list=[0],
+        root_inputs_dir='outputs/computations/',
+        root_outputs_dir='outputs/computations/',
+        num_experiments_for_each_subject=5,
+        seed_list=[
+            187372311,
+            204110176,
+            129995678,
+            6155814,
+            22612812],
         polygoned=True,
         distortion=True,
         patch_localization=False,
-        batch_size=32,
+        batch_size=64,
         imsize=(256,256))

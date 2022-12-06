@@ -137,12 +137,12 @@ if __name__ == "__main__":
 
     experiments = get_all_subject_experiments('dataset/')
     run(
-        experiments_list=experiments,
+        experiments_list=['toothbrush', 'capsule'],
         dataset_dir='dataset/', 
         root_outputs_dir='brutta_copia/computations/',
         imsize=(256,256),
         polygoned=True,
-        distortion=True,
+        distortion=False,
         patch_localization=True,
         batch_size=96,
         train_val_split=0.2,
