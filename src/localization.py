@@ -3,27 +3,72 @@ from tqdm import tqdm
 from self_supervised.gradcam import GradCam
 from torchvision import transforms
 from self_supervised.support.functional import *
-from self_supervised.support.visualization import localize, plot_heatmap, plot_heatmap_and_masks
+from self_supervised.support.visualization import *
 import self_supervised.support.constants as CONST
 import self_supervised.datasets as dt
 import self_supervised.model as md
+import self_supervised.metrics as mtr
 import random
 import os
 import torch
 import numpy as np
 
 
-
-def image_localization(mvtec, model_dir, gradcam_dir, seed):
+def localize_single_image(
+        filename:str,
+        imsize:tuple,
+        model_dir:str,
+        output_dir:str,
+        output_name:str
+        ):
+    image = Image.open(filename).resize(imsize).convert('RGB')
+    input_tensor = transforms.ToTensor()(image)
+    input_tensor_norm = transforms.Normalize(
+            (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(input_tensor)
+    
     sslm = md.SSLM.load_from_checkpoint(
     model_dir)
     sslm.eval()
+    sslm.unfreeze_layers(False)
+
     gradcam = GradCam(
         md.SSLM.load_from_checkpoint(model_dir).model)
-    j = len(mvtec.test_dataset)-1
     
-    for i in tqdm(range(3), desc='localizing defects'):
-        input_image_tensor, gt = mvtec.test_dataset[random.randint(0, j)]
+    y_hat, embedding = sslm(input_tensor_norm[None, :])
+    predicted_class = get_prediction_class(y_hat)
+    if predicted_class == 0:
+        saliency_map = torch.zeros((256,256))[None, None, :]
+    else:
+        if predicted_class > 1:
+            predicted_class = 1
+        saliency_map = gradcam(input_tensor_norm[None, :], predicted_class)
+    heatmap = localize(input_tensor[None, :], saliency_map)
+    image_array = imagetensor2array(input_tensor)
+    plot_heatmap(image_array, heatmap, saving_path=output_dir, name=output_name)
+    
+    
+def image_level_localization(
+        datamodule:dt.MVTecDatamodule, 
+        root_inputs_dir:str,
+        root_outputs_dir:str,
+        subject:str,
+        num_images:int=3):
+    
+    outputs_dir = root_outputs_dir+subject+'/image_level/gradcam/'
+    model_input_dir = root_inputs_dir+subject+'/image_level/best_model.ckpt'
+    
+    sslm = md.SSLM.load_from_checkpoint(
+    model_input_dir)
+    sslm.eval()
+    gradcam = GradCam(
+        md.SSLM.load_from_checkpoint(model_input_dir).model)
+    j = len(datamodule.test_dataset)-1
+    
+    ground_truth_maps = []
+    anomaly_maps = []
+    
+    for i in tqdm(range(num_images), desc='localizing defects'):
+        input_image_tensor, gt = datamodule.test_dataset[random.randint(0, j)]
         input_tensor_norm = transforms.Normalize(
             (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(input_image_tensor)
         
@@ -37,29 +82,59 @@ def image_localization(mvtec, model_dir, gradcam_dir, seed):
             saliency_map = gradcam(input_tensor_norm[None, :], predicted_class)
         heatmap = localize(input_image_tensor[None, :], saliency_map)
         image = imagetensor2array(input_image_tensor)
-        gt = imagetensor2array(gt)
+        gt_mask = imagetensor2array(gt)
+        pred_mask = heatmap2mask(saliency_map.squeeze(), threshold=0.75)
         #plot_heatmap(image, heatmap, saving_path=gradcam_dir, name='heatmap_'+str(i)+'.png')
         
         plot_heatmap_and_masks(
             image, 
             heatmap, 
-            gt, 
-            heatmap2mask(saliency_map.squeeze(), threshold=0.75),
-            saving_path=gradcam_dir,
+            gt_mask, 
+            pred_mask,
+            saving_path=outputs_dir,
             name='heatmap_and_masks_'+str(i)+'.png')
-        #os.system('clear')
+        anomaly_maps.append(np.array(saliency_map.squeeze()))
+        ground_truth_maps.append(np.array(gt.squeeze()))
+        
+    print('>>> PRO and AUPRO')
+    all_fprs, all_pros = mtr.compute_pro(
+    anomaly_maps=np.array(anomaly_maps),
+    ground_truth_maps=np.array(ground_truth_maps))
+
+    au_pro = mtr.compute_aupro(all_fprs, all_pros, 0.3)
+    plot_curve(
+        all_fprs,
+        all_pros,
+        au_pro,
+        saving_path=root_outputs_dir+subject+'/image_level/',
+        title='Pro curve for '+subject.upper(),
+        name='pro.png'
+    )
+    return au_pro
 
 
-def patch_localization(mvtec, model_dir, gradcam_dir, seed):
+def patch_level_localization( 
+        datamodule:dt.MVTecDatamodule, 
+        root_inputs_dir:str,
+        root_outputs_dir:str,
+        subject:str,
+        num_images:int=5):
+    
+    outputs_dir = root_outputs_dir+subject+'/patch_level/gradcam/'
+    model_input_dir = root_inputs_dir+subject+'/patch_level/best_model.ckpt'
+    
     sslm = md.SSLM.load_from_checkpoint(
-    model_dir)
+    model_input_dir)
     sslm.to('cuda')
     sslm.eval()
     sslm.unfreeze_layers(False)
     
     train_embeddings_gde = []
-    for i in range(3):
-        train_img_tensor, _ = mvtec.train_dataloader().dataset.__getitem__(i)
+    train_gde_imgs = random.sample(list(datamodule.train_dataloader().dataset.images_filenames), 2)
+    for i in range(len(train_gde_imgs)):
+        #print(train_gde_imgs[i])
+        train_img_tensor = Image.open(train_gde_imgs[i]).resize((256,256)).convert('RGB')
+        train_img_tensor = transforms.ToTensor()(train_img_tensor)
         train_img_tensor_norm = transforms.Normalize(
             (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(train_img_tensor)
         train_img_tensor_norm = train_img_tensor_norm.unsqueeze(0)
@@ -68,12 +143,12 @@ def patch_localization(mvtec, model_dir, gradcam_dir, seed):
         _, train_embedding = sslm(train_patches.to('cuda'))
         train_embeddings_gde.append(train_embedding.to('cpu'))
     train_embedding = torch.cat(train_embeddings_gde, dim=0)
-    gde = md.GDE()
+    gde = md.GDE1()
+    print(train_embedding.shape)
     gde.fit(train_embedding)
-    j = len(mvtec.test_dataset)-1
-    random.seed(seed)
-    for i in tqdm(range(3), desc='localizing defects'):
-        input_image_tensor, gt = mvtec.test_dataset[random.randint(0, j)]
+    j = len(datamodule.test_dataset)-1
+    for i in tqdm(range(num_images), desc='localizing defects'):
+        input_image_tensor, gt = datamodule.test_dataset[random.randint(0, j)]
         input_tensor_norm = transforms.Normalize(
             (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(input_image_tensor)
         input_tensor_norm = input_tensor_norm.unsqueeze(0)
@@ -101,67 +176,96 @@ def patch_localization(mvtec, model_dir, gradcam_dir, seed):
             heatmap, 
             gt, 
             heatmap2mask(out.squeeze(), threshold=0.7),
-            saving_path=gradcam_dir,
+            saving_path=outputs_dir,
             name='heatmap_and_masks_'+str(i)+'.png')
-        #os.system('clear')
-    
+        
     
 def localization_pipeline(
         dataset_dir:str,
         root_inputs_dir:str,
         root_outputs_dir:str,
         subject:str,
-        level:str,
-        seed=CONST.DEFAULT_SEED()):
+        num_images:int=3,
+        imsize:tuple=CONST.DEFAULT_IMSIZE(),
+        seed:int=CONST.DEFAULT_SEED(),
+        patch_localization:bool=False):
     
     random.seed(seed)
     np.random.seed(seed)
-    imsize = CONST.DEFAULT_IMSIZE()
-    batch_size = CONST.DEFAULT_BATCH_SIZE()
-    gradcam_dir = root_outputs_dir+subject+'/'+level+'/gradcam/'
-    model_dir = root_inputs_dir+subject+'/'+level+'/'+'best_model.ckpt'
-    
     mvtec = dt.MVTecDatamodule(
         root_dir=dataset_dir+subject+'/',
         subject=subject,
         imsize=imsize,
-        batch_size=batch_size,
-        seed=seed,
         localization=True
     )
     mvtec.setup()
-    
-    if level=='image_level':
-        image_localization(mvtec, model_dir, gradcam_dir, seed)
-    if level=='patch_level':
-        patch_localization(mvtec, model_dir, gradcam_dir, seed)
-
-def pipeline():
-    root_outputs_dir='outputs/computations/'
-    experiments = get_all_subject_experiments('dataset/', patch_localization=False)
-    level = 'patch_level'
-    pbar = tqdm(range(len(experiments)))
-    for i in pbar:
-        pbar.set_description('Pipeline Execution '+level+' | current subject is '+experiments[i][0].upper())
-        
-        subject = experiments[i][0]
-        patch_localization = experiments[i][1]
-        if patch_localization:
-            level = 'patch_level'
-        else:
-            level = 'image_level'
-        
-        localization_pipeline(
-            dataset_dir='dataset/', 
-            root_inputs_dir='outputs/computations/',
+    #gradcam_dir = root_outputs_dir+subject+'/'+level+'/gradcam/'
+    #model_dir = root_inputs_dir+subject+'/'+level+'/'+'best_model.ckpt'
+    if patch_localization:
+        patch_level_localization(
+            datamodule=mvtec, 
+            root_inputs_dir=root_inputs_dir, 
             root_outputs_dir=root_outputs_dir,
             subject=subject,
-            level=level,
-            seed=0
+            num_images=num_images)
+    else:
+        image_level_localization(
+            datamodule=mvtec, 
+            root_inputs_dir=root_inputs_dir, 
+            root_outputs_dir=root_outputs_dir,
+            subject=subject,
+            num_images=num_images)
+    
+
+def run(
+        experiments_list:list,
+        dataset_dir:str,
+        root_inputs_dir:str,
+        root_outputs_dir:str,
+        num_images:int=3,
+        imsize:int=CONST.DEFAULT_IMSIZE(),
+        seed:int=0,
+        patch_localization=False
+        ):
+    
+    os.system('clear')
+    
+    pbar = tqdm(range(len(experiments_list)))
+    for i in pbar:
+        pbar.set_description('Localization pipeline | current subject is '+experiments_list[i].upper())
+        subject = experiments_list[i]
+        localization_pipeline(
+            dataset_dir=dataset_dir,
+            root_inputs_dir=root_inputs_dir,
+            root_outputs_dir=root_outputs_dir,
+            subject=subject,
+            num_images=num_images,
+            imsize=imsize,
+            seed=seed,
+            patch_localization=patch_localization
         )
-        os.system('clear')
+
+
+def single_im():
+    localize_single_image(
+        filename='memes/in/artemisia.jpg',
+        imsize=(256,256),
+        model_dir='outputs/computations/bottle/image_level/best_model.ckpt',
+        output_dir='memes/out/',
+        output_name='anomalous_artemisia.png'
+    )
+
 
 if __name__ == "__main__":
-    pipeline()
-    #singleim()
+    run(
+        experiments_list=get_all_subject_experiments('dataset/'),
+        dataset_dir='dataset/',
+        root_inputs_dir='outputs/computations/',
+        root_outputs_dir='brutta_copia/',
+        num_images=5,
+        imsize=(256,256),
+        seed=0,
+        patch_localization=False
+        )
+    #single_im()
     

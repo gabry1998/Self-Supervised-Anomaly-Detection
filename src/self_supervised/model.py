@@ -11,6 +11,7 @@ from sklearn.neighbors import KernelDensity
 import self_supervised.support.constants as CONST
 from numpy import array
 from torch import Tensor
+import time
 
 
 class SSLModel(nn.Module):
@@ -230,7 +231,23 @@ class MetricTracker(pl.Callback):
     self.log_metrics['val']['accuracy'].append(elogs['val_accuracy'].item())
     self.log_metrics['val']['loss'].append(elogs['val_loss'].item())
 
-
+class GDE1():
+    def __init__(self) -> None:
+        pass
+        
+    def fit(self, embeddings:Tensor):
+            self.kde = KernelDensity().fit(embeddings)
+        
+        
+    def predict(self, embeddings:Tensor):
+        start = time.time()
+        scores = np.array(self.kde.score_samples(embeddings))
+        end = time.time() -start
+        print(end)
+        norm = np.linalg.norm(-scores)
+        scores = -(scores/norm)
+        return torch.tensor(scores)
+    
 class GDE(object):
     def fit(self, embeddings:Tensor):
         self.mean = torch.mean(embeddings, axis=0)

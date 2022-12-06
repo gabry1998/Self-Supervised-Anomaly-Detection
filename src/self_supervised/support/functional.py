@@ -9,8 +9,8 @@ import torch.nn.functional as F
 
 
 
-def get_all_subject_experiments(dataset_dir:str, patch_localization:bool=False):
-    return sorted([(name, patch_localization) for name in os.listdir(dataset_dir) if os.path.isdir(
+def get_all_subject_experiments(dataset_dir:str):
+    return sorted([name for name in os.listdir(dataset_dir) if os.path.isdir(
                         dataset_dir+name)
                     ])
 
@@ -112,6 +112,11 @@ def normalize(tensor:Tensor):
     tensor /= tensor.max()
     return tensor
 
+
+def normalize_in_interval(sample_mat, interval_min, interval_max):
+    x =(sample_mat - np.min(sample_mat)) / (np.max(sample_mat) - np.min(sample_mat)) * (interval_max - interval_min) + interval_min
+    x = np.rint(x)
+    return x
 
 class GaussianSmooth:
     def __init__(self, kernel_size=32, stride=4, std=None, device=None):

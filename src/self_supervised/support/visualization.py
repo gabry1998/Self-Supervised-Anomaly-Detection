@@ -14,7 +14,7 @@ import os
 
 
 
-def plot_history(network_history, epochs, saving_path=None, mode='training'):
+def plot_history(network_history, saving_path=None, mode='training'):
     if saving_path and not os.path.exists(saving_path):
         os.makedirs(saving_path)
         
@@ -44,7 +44,7 @@ def plot_history(network_history, epochs, saving_path=None, mode='training'):
     plt.show()
     plt.close()
 
-def plot_roc(fpr, tpr, roc_auc, saving_path:str=None, title:str='', name:str='roc.png'):
+def plot_curve(fpr, tpr, area, saving_path:str=None, title:str='', name:str='curve.png'):
     if saving_path and not os.path.exists(saving_path):
         os.makedirs(saving_path)
         
@@ -52,7 +52,7 @@ def plot_roc(fpr, tpr, roc_auc, saving_path:str=None, title:str='', name:str='ro
     plt.figure()
     lw = 2
     plt.plot(fpr, tpr, color='darkorange',
-            lw=lw, label='ROC curve (area = %0.2f)' % roc_auc)
+            lw=lw, label='Curve (area = %0.2f)' % area)
     plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
     plt.xlim([0.0, 1.0])
     plt.ylim([0.0, 1.05])

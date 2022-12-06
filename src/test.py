@@ -1,6 +1,6 @@
 from self_supervised.datasets import GenerativeDatamodule, MVTecDatamodule
 from self_supervised.model import *
-from self_supervised.support.dataset_generator import generate_dataset
+from self_supervised.support.dataset_generator import *
 from self_supervised.support.functional import *
 from self_supervised.support.cutpaste_parameters import CPP
 from tqdm import tqdm
@@ -20,7 +20,7 @@ import self_supervised.model as md
 import cv2
 from sklearn import preprocessing
 import self_supervised.metrics as mtr
-from self_supervised.support.visualization import localize, plot_heatmap, plot_roc
+from self_supervised.support.visualization import localize, plot_heatmap, plot_curve
 
 
 def read_test():
@@ -146,7 +146,7 @@ def test_GDE_image_level():
     print(int_labels)
     test_labels = torch.tensor(int_labels)
     
-    plot_roc(test_labels, scores)
+    plot_curve(test_labels, scores)
 
 #test_GDE_image_level()
 
@@ -349,5 +349,9 @@ def other_tests():
 #test_pixel_level_metrics()
 
 
-x = sorted(get_all_subject_experiments('dataset/', patch_localization=False))
-print(x)
+x = Image.open('dataset/bottle/train/good/000.png').resize((256,256)).convert('RGB')
+#x = transforms.RandomCrop((64,64))(x)
+y, mask, coords = generate_patch(x, polygoned=True, distortion=True)
+z = paste_patch(x, y, coords, mask)
+plt.imshow(z)
+plt.savefig('a.png')

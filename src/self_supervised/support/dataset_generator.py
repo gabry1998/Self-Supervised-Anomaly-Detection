@@ -1,38 +1,29 @@
 import random
 from PIL import Image, ImageFilter, ImageOps, ImageDraw
 import numpy as np
-from .cutpaste_parameters import CPP
-from .functional import get_image_filenames, duplicate_filenames
-import time
+from .functional import normalize_in_interval
+from scipy.spatial import ConvexHull
 
 
 
 class Deformer:
-    def __init__(self, img_size, area_ratio=(0.02, 0.15), aspect_ratio=((0.3, 1),(1, 3.3))) -> None:
-        self.img_size = img_size
-
-        img_area = self.img_size[0] * self.img_size[1]
-        patch_area = random.uniform(area_ratio[0], area_ratio[1]) * img_area
-        patch_aspect = random.choice([random.uniform(*aspect_ratio[0]), random.uniform(*aspect_ratio[1])])
-        patch_w  = int(np.sqrt(patch_area*patch_aspect))
-        patch_h = int(np.sqrt(patch_area/patch_aspect))
-        org_w, org_h = self.img_size
-        self.crop_left, self.crop_top = random.randint(0, (org_w - patch_w)), random.randint(0, (org_h - patch_h))
-        self.crop_right, self.crop_bottom = self.crop_left + patch_w, self.crop_top + patch_h
-        self.paste_left, self.paste_top = random.randint(0, (org_w - patch_w)), random.randint(0, (org_h - patch_h))
+    def __init__(self, imsize:tuple, points:tuple) -> None:
+        self.imsize = imsize
+        self.crop_left, self.crop_top,self.crop_right, self.crop_bottom = points
+        
     def getmesh(self, img):
         return [(
                 # target rectangle
                 (self.crop_left, self.crop_top,self.crop_right, self.crop_bottom),
                 # corresponding source quadrilateral
-                (np.random.randint(0, self.img_size[0]), 
-                 np.random.randint(0,self.img_size[0]),
-                 np.random.randint(0,self.img_size[0]),
-                 np.random.randint(0,self.img_size[0]),
-                 np.random.randint(0,self.img_size[0]),
-                 np.random.randint(0,self.img_size[0]),
-                 np.random.randint(0,self.img_size[0]),
-                 np.random.randint(0,self.img_size[0]))
+                (np.random.randint(0, self.imsize[0]), 
+                 np.random.randint(0,self.imsize[0]),
+                 np.random.randint(0,self.imsize[0]),
+                 np.random.randint(0,self.imsize[0]),
+                 np.random.randint(0,self.imsize[1]),
+                 np.random.randint(0,self.imsize[1]),
+                 np.random.randint(0,self.imsize[1]),
+                 np.random.randint(0,self.imsize[1]))
                 )]
 
 
@@ -55,24 +46,13 @@ def get_random_points(width, height, num_points=3):
     return points
 
 
-def generate_patch_distorted(
-        image, 
-        area_ratio=(0.02, 0.15),
-        aspect_ratio=((0.3, 1),(1, 3.3))):
-    sd = Deformer(
-        image.size, 
-        area_ratio, 
-        aspect_ratio)
-    deformed = ImageOps.deform(image, sd)
-    return deformed.crop((sd.crop_left, sd.crop_top, sd.crop_right, sd.crop_bottom)), (sd.paste_left, sd.paste_top)
-
 def generate_patch(
         image, 
-        area_ratio=(0.02, 0.15), 
-        aspect_ratio=((0.3, 1),(1, 3.3)),
-        polygoned=True):
+        area_ratio:tuple=(0.02, 0.15), 
+        aspect_ratio:tuple=((0.3, 1),(1, 3.3)),
+        polygoned=False,
+        distortion=False):
 
-    #print('generate_patch', area_ratio)
     img_area = image.size[0] * image.size[1]
     patch_area = random.uniform(area_ratio[0], area_ratio[1]) * img_area
     patch_aspect = random.choice([random.uniform(*aspect_ratio[0]), random.uniform(*aspect_ratio[1])])
@@ -85,15 +65,33 @@ def generate_patch(
     paste_left, paste_top = random.randint(0, org_w - patch_w), random.randint(0, org_h - patch_h)
 
     mask = None
+    
     if polygoned:
         mask = Image.new('RGBA', (patch_w, patch_h), (0, 0, 0, 0)) 
         draw = ImageDraw.Draw(mask)
             
-        points = get_random_points(mask.size[0], mask.size[1], random.randint(3,5))
+        #points = get_random_points(mask.size[0], mask.size[1], random.randint(3,5))
+        raw_points = 0.1 + 0.8*np.random.rand(random.randint(15,15), 2)
+        ch = ConvexHull(raw_points)
+        hull_indices = ch.vertices
+        points = raw_points[hull_indices, :]
+        print(mask.size)
+        print(points)
+        x = [points[i][0] for i in range(len(points))]
+        y = [points[i][1] for i in range(len(points))]
+        x1 = normalize_in_interval(x, 0, mask.size[0])
+        y1 = normalize_in_interval(y, 0, mask.size[1])
+        points = [(x1[i], y1[i]) for i in range(len(points))]
+        print(points)
+        draw.polygon(points, fill='black')
         
-        draw.polygon(points, fill='white')
-    
-    return image.crop((patch_left, patch_top, patch_right, patch_bottom)), mask, (paste_left, paste_top)
+    if distortion:
+        deformer = Deformer(imsize=image.size, points=(patch_left, patch_top, patch_right, patch_bottom))
+        deformed_image = ImageOps.deform(image, deformer)
+        cropped_patch = deformed_image.crop((patch_left, patch_top, patch_right, patch_bottom))
+    else:
+        cropped_patch = image.crop((patch_left, patch_top, patch_right, patch_bottom))
+    return cropped_patch, mask, (paste_left, paste_top)
 
 
 def paste_patch(image, patch, coords, mask=None):
@@ -166,62 +164,3 @@ def generate_scar_new(image, w_range=(2,16), h_range=(10,25), augs=None, with_pa
     #posizione casuale della sezione
     left, top = random.randint(0, img_w - scar_w), random.randint(0, img_h - scar_h)
     return scar, (left, top)
-
-
-def generate_dataset(
-        dataset_dir:str, 
-        imsize=(256,256),
-        classification_task:str='binary'):
-    
-    raw_images_filenames = get_image_filenames(dataset_dir) # qualcosa come ../dataset/bottle/train/good/
-    data = []
-    labels = []
-    
-    augs = CPP.jitter_transforms
-    area_ratio_patch = CPP.cutpaste_augmentations['patch']['area_ratio']
-    aspect_ratio_patch = CPP.cutpaste_augmentations['patch']['aspect_ratio']
-    scar_width = CPP.cutpaste_augmentations['scar']['width']
-    scar_thiccness = CPP.cutpaste_augmentations['scar']['thiccness']
-    
-    print('generating dataset', '('+str(len(raw_images_filenames))+' filenames)')
-    start = time.time()
-    for filename in raw_images_filenames:
-        image = Image.open(filename).resize(imsize).convert('RGB')
-        r0, r90, r180, r270 = generate_rotations(image)
-        rotations = [r0, r90, r180, r270]
-
-        for img in rotations:
-            data.append(img)
-            labels.append(0)
-        
-            if classification_task=='binary':
-                if random.randint(0,1)==1:
-                    #cutpaste
-                    x, coords = generate_patch(img, area_ratio_patch, aspect_ratio_patch)
-                    x = apply_jittering(x, augs)
-                    new_img = paste_patch(img, x, coords)
-                    data.append(new_img)
-                    labels.append(1)
-                else:
-                    #scar
-                    x, coords = generate_scar(img.size, scar_width, scar_thiccness)
-                    new_img = paste_patch(img, x, coords, x)
-                    data.append(new_img)
-                    labels.append(1)
-                
-            if classification_task=='3-way':
-                #cutpaste
-                x, coords = generate_patch(img, area_ratio_patch, aspect_ratio_patch)
-                x = apply_jittering(x, augs)
-                new_img = paste_patch(img, x, coords)
-                data.append(new_img)
-                labels.append(1)
-                #scar
-                x, coords = generate_scar(img.size, scar_width, scar_thiccness)
-                new_img = paste_patch(img, x, coords, x)
-                data.append(new_img)
-                labels.append(2)
-    end = time.time() - start
-    print('done generation in ', str(end), 'sec')
-    
-    return data, labels

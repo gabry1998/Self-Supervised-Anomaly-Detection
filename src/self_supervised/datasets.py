@@ -115,7 +115,7 @@ class GenerativeDataset(Dataset):
             imsize=CONST.DEFAULT_IMSIZE(),
             transform=None,
             distortion=False,
-            polygons = True,
+            polygons=False,
             patch_localization=False,
             patch_size:tuple=CONST.DEFAULT_PATCH_SIZE()) -> None:
 
@@ -166,10 +166,16 @@ class GenerativeDataset(Dataset):
             return x
         if y == 1:
             x = generate_rotation(x)
-            if self.distortion:
-                patch, coords = generate_patch_distorted(x, self.area_ratio, self.aspect_ratio)
-            else:
-                patch, mask, coords = generate_patch(x, self.area_ratio, self.aspect_ratio, self.polygoned)
+            #if self.distortion:
+            #    patch, coords = generate_patch_distorted(x, self.area_ratio, self.aspect_ratio)
+            #else:
+            #    patch, mask, coords = generate_patch(x, self.area_ratio, self.aspect_ratio, self.polygoned)
+            patch, mask, coords = generate_patch(
+                image=x, 
+                area_ratio=self.area_ratio, 
+                aspect_ratio=self.aspect_ratio, 
+                polygoned=self.polygoned, 
+                distortion=self.distortion)
             patch = apply_jittering(patch, CPP.jitter_transforms)
             x = paste_patch(x, patch, coords, mask)
             return x
@@ -190,6 +196,7 @@ class GenerativeDatamodule(pl.LightningDataModule):
             seed:int=CONST.DEFAULT_SEED(),
             min_dataset_length:int=1000,
             duplication=False,
+            polygoned=False,
             distortion=False,
             patch_localization=False,
             patch_size:tuple=CONST.DEFAULT_PATCH_SIZE()):
@@ -205,6 +212,7 @@ class GenerativeDatamodule(pl.LightningDataModule):
         self.seed = seed
         self.min_dataset_length = min_dataset_length
         self.duplication = duplication
+        self.polygoned = polygoned
         self.distortion = distortion
         self.patch_localization = patch_localization
         self.patch_size = patch_size
@@ -251,6 +259,7 @@ class GenerativeDatamodule(pl.LightningDataModule):
                 self.val_images_filenames,
                 imsize=self.imsize,
                 transform=self.transform,
+                polygons=self.polygoned,
                 distortion=self.distortion,
                 patch_localization=self.patch_localization,
                 patch_size=self.patch_size)
@@ -260,6 +269,7 @@ class GenerativeDatamodule(pl.LightningDataModule):
                 self.test_images_filenames,
                 imsize=self.imsize,
                 transform=self.transform,
+                polygons=self.polygoned,
                 distortion=self.distortion,
                 patch_localization=self.patch_localization,
                 patch_size=self.patch_size)
@@ -270,6 +280,7 @@ class GenerativeDatamodule(pl.LightningDataModule):
                 self.train_images_filenames,
                 imsize=self.imsize,
                 transform=self.transform,
+                polygons=self.polygoned,
                 distortion=self.distortion,
                 patch_localization=self.patch_localization,
                 patch_size=self.patch_size)
