@@ -2,9 +2,11 @@ from self_supervised.datasets import *
 from self_supervised.model import SSLM, MetricTracker
 from self_supervised.support.visualization import plot_history
 from pytorch_lightning.callbacks import EarlyStopping
-import pytorch_lightning as pl
 from tqdm import tqdm
+import pytorch_lightning as pl
 import os
+import numpy as np
+import random
 
 
 def get_trainer(stopping_threshold, epochs, reload_dataloaders_every_n_epochs):
@@ -129,6 +131,7 @@ def run(
             fine_tune_lr=fine_tune_lr,
             fine_tune_epochs=fine_tune_epochs
             )
+        os.system('clear')
 
 if __name__ == "__main__":
 
@@ -139,7 +142,7 @@ if __name__ == "__main__":
         root_outputs_dir='brutta_copia/computations/',
         imsize=(256,256),
         polygoned=True,
-        distortion=False,
+        distortion=True,
         patch_localization=True,
         batch_size=96,
         train_val_split=0.2,

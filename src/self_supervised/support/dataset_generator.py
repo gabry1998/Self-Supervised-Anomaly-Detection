@@ -67,22 +67,19 @@ def generate_patch(
     mask = None
     
     if polygoned:
-        mask = Image.new('RGBA', (patch_w, patch_h), (0, 0, 0, 0)) 
+        mask = Image.new('RGBA', (patch_w, patch_h), (255,255,255,0)) 
         draw = ImageDraw.Draw(mask)
             
         #points = get_random_points(mask.size[0], mask.size[1], random.randint(3,5))
-        raw_points = 0.1 + 0.8*np.random.rand(random.randint(15,15), 2)
+        raw_points = 0.1 + 0.8*np.random.rand(random.randint(3,15), 2)
         ch = ConvexHull(raw_points)
         hull_indices = ch.vertices
         points = raw_points[hull_indices, :]
-        print(mask.size)
-        print(points)
         x = [points[i][0] for i in range(len(points))]
         y = [points[i][1] for i in range(len(points))]
         x1 = normalize_in_interval(x, 0, mask.size[0])
         y1 = normalize_in_interval(y, 0, mask.size[1])
         points = [(x1[i], y1[i]) for i in range(len(points))]
-        print(points)
         draw.polygon(points, fill='black')
         
     if distortion:

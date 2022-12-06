@@ -6,6 +6,9 @@ import self_supervised.datasets as dt
 import self_supervised.support.constants as CONST
 import self_supervised.support.visualization as vis
 import self_supervised.metrics as mtr
+import time
+import random
+import numpy as np
 
 
 
@@ -26,6 +29,7 @@ def inference_pipeline(
         root_inputs_dir:str,
         root_outputs_dir:str,
         subject:str,
+        polygoned:bool=True,
         distortion:bool=False,
         patch_localization=False,
         seed:int=CONST.DEFAULT_SEED(),
@@ -42,6 +46,7 @@ def inference_pipeline(
     print('model weights dir:', model_dir)
     outputs_dir = root_outputs_dir+subject+'/image_level/'
     print('outputs directory:', outputs_dir)
+    print('polygoned patches:', polygoned)
     print('distorted patches:', distortion)
     print('patch localization:', patch_localization)
     
@@ -61,6 +66,7 @@ def inference_pipeline(
         duplication=True,
         min_dataset_length=500,
         patch_localization=patch_localization,
+        polygoned=polygoned,
         distortion=distortion
     )
     artificial.setup('test')
@@ -123,15 +129,6 @@ def inference_pipeline(
     end = time.time() - start
     print('Done in '+str(end)+ 'sec')
     
-    print('>>> plot ROC..')
-    if auc_score > current_auc:
-        vis.plot_curve(
-            fpr, tpr, 
-            auc_score, 
-            saving_path=outputs_dir,
-            title='Roc curve for '+subject.upper(),
-            name='roc.png')
-    
     print('>>> compute PRO')
     gradcam = GradCam(
         SSLM.load_from_checkpoint(model_dir).model)
@@ -154,7 +151,18 @@ def inference_pipeline(
     ground_truth_maps=ground_truth_maps)
 
     au_pro = mtr.compute_aupro(all_fprs, all_pros, 0.3)
-    if au_pro > current_aupro:
+    
+    if (auc_score > current_auc) and (au_pro > current_aupro) and f_score > current_f1:
+        print('>>> plot ROC..')
+    
+        vis.plot_curve(
+            fpr, tpr, 
+            auc_score, 
+            saving_path=outputs_dir,
+            title='Roc curve for '+subject.upper(),
+            name='roc.png')
+    
+        print('>>> plot PRO..')
         vis.plot_curve(
             all_fprs,
             all_pros,
@@ -164,21 +172,17 @@ def inference_pipeline(
             name='pro.png'
         )
     
-    y_artificial = y_artificial.tolist() 
-    total_y = y_artificial + y_mvtec
-    total_y = torch.tensor(np.array(total_y))
-    total_embeddings = torch.cat([embeddings_artificial, embeddings_mvtec])
+        y_artificial = y_artificial.tolist() 
+        total_y = y_artificial + y_mvtec
+        total_y = torch.tensor(np.array(total_y))
+        total_embeddings = torch.cat([embeddings_artificial, embeddings_mvtec])
     
-    print('>>> Generating tsne visualization')
-    if f_score > current_f1:
-        start = time.time()
+        print('>>> Generating tsne visualization')
         vis.plot_tsne(
             total_embeddings, 
             total_y, 
             saving_path=outputs_dir, 
             title='Embeddings projection for '+subject.upper())
-        end = time.time() - start
-        print('Done in '+str(end)+ 'sec')
     return auc_score, f_score, au_pro
 
 
@@ -189,6 +193,7 @@ def run(
         root_outputs_dir:str,
         num_experiments_for_each_subject:int=1,
         seed_list:list=[0],
+        polygoned=True,
         distortion:bool=False,
         patch_localization=False,
         batch_size:int=128,
@@ -221,6 +226,7 @@ def run(
                 root_inputs_dir=root_inputs_dir,
                 root_outputs_dir=root_outputs_dir,
                 subject=subject,
+                polygoned=polygoned,
                 distortion=distortion,
                 patch_localization=patch_localization,
                 seed=seed,
@@ -261,11 +267,12 @@ if __name__ == "__main__":
     run(
         experiments_list=experiments,
         dataset_dir='dataset/',
-        root_inputs_dir='outputs/computations/',
-        root_outputs_dir='brutta_copia/',
-        num_experiments_for_each_subject=5,
-        seed_list=[0, 1, 2, 3, 4],
-        distortion=False,
+        root_inputs_dir='brutta_copia/computations/',
+        root_outputs_dir='brutta_copia/computations/',
+        num_experiments_for_each_subject=1,
+        seed_list=[0],
+        polygoned=True,
+        distortion=True,
         patch_localization=False,
         batch_size=32,
         imsize=(256,256))
