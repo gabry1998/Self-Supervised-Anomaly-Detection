@@ -95,22 +95,6 @@ def image_level_localization(
             name='heatmap_and_masks_'+str(i)+'.png')
         anomaly_maps.append(np.array(saliency_map.squeeze()))
         ground_truth_maps.append(np.array(gt.squeeze()))
-        
-    print('>>> PRO and AUPRO')
-    all_fprs, all_pros = mtr.compute_pro(
-    anomaly_maps=np.array(anomaly_maps),
-    ground_truth_maps=np.array(ground_truth_maps))
-
-    au_pro = mtr.compute_aupro(all_fprs, all_pros, 0.3)
-    plot_curve(
-        all_fprs,
-        all_pros,
-        au_pro,
-        saving_path=root_outputs_dir+subject+'/image_level/',
-        title='Pro curve for '+subject.upper(),
-        name='pro.png'
-    )
-    return au_pro
 
 
 def patch_level_localization( 
@@ -143,11 +127,12 @@ def patch_level_localization(
         _, train_embedding = sslm(train_patches.to('cuda'))
         train_embeddings_gde.append(train_embedding.to('cpu'))
     train_embedding = torch.cat(train_embeddings_gde, dim=0)
-    gde = md.GDE1()
-    print(train_embedding.shape)
+    gde = md.GDE()
+    #print(train_embedding.shape)
     gde.fit(train_embedding)
     j = len(datamodule.test_dataset)-1
-    for i in tqdm(range(num_images), desc='localizing defects'):
+    loc_bar = tqdm(range(num_images), desc='localizing defects', position=1)
+    for i in loc_bar:
         input_image_tensor, gt = datamodule.test_dataset[random.randint(0, j)]
         input_tensor_norm = transforms.Normalize(
             (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(input_image_tensor)
@@ -230,7 +215,7 @@ def run(
     
     os.system('clear')
     
-    pbar = tqdm(range(len(experiments_list)))
+    pbar = tqdm(range(len(experiments_list)), position=0, leave=False)
     for i in pbar:
         pbar.set_description('Localization pipeline | current subject is '+experiments_list[i].upper())
         subject = experiments_list[i]
@@ -260,8 +245,8 @@ if __name__ == "__main__":
     run(
         experiments_list=get_all_subject_experiments('dataset/'),
         dataset_dir='dataset/',
-        root_inputs_dir='outputs/computations/',
-        root_outputs_dir='brutta_copia/',
+        root_inputs_dir='brutta_copia/computations/',
+        root_outputs_dir='brutta_copia/computations/',
         num_images=5,
         imsize=(256,256),
         seed=0,

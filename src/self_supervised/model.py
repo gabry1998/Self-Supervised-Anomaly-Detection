@@ -243,7 +243,7 @@ class GDE1():
         start = time.time()
         scores = np.array(self.kde.score_samples(embeddings))
         end = time.time() -start
-        print(end)
+        #print(end)
         norm = np.linalg.norm(-scores)
         scores = -(scores/norm)
         return torch.tensor(scores)
