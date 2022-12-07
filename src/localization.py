@@ -114,7 +114,7 @@ def patch_level_localization(
     sslm.unfreeze_layers(False)
     
     train_embeddings_gde = []
-    train_gde_imgs = random.sample(list(datamodule.train_dataloader().dataset.images_filenames), 2)
+    train_gde_imgs = random.sample(list(datamodule.train_dataloader().dataset.images_filenames), 4)
     for i in range(len(train_gde_imgs)):
         #print(train_gde_imgs[i])
         train_img_tensor = Image.open(train_gde_imgs[i]).resize((256,256)).convert('RGB')
@@ -129,6 +129,8 @@ def patch_level_localization(
     train_embedding = torch.cat(train_embeddings_gde, dim=0)
     gde = md.GDE()
     #print(train_embedding.shape)
+    
+    train_embedding = torch.nn.functional.normalize(train_embedding, p=2, dim=1)
     gde.fit(train_embedding)
     j = len(datamodule.test_dataset)-1
     loc_bar = tqdm(range(num_images), desc='localizing defects', position=1)
@@ -141,11 +143,12 @@ def patch_level_localization(
         y_hat, embeddings = sslm(patches.to('cuda'))
         y_hat = get_prediction_class(y_hat.to('cpu'))
         embeddings = embeddings.to('cpu')
+        embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
         mvtec_test_scores = gde.predict(embeddings)
         dim = int(np.sqrt(embeddings.shape[0]))
         out = torch.reshape(mvtec_test_scores, (dim, dim))
         out = normalize(out)
-        out[out < 0.35] = 0
+        #out[out < 0.35] = 0
         gs = GaussianSmooth(device='cpu')
         out = gs.upsample(out[None, None, :])
         out = normalize(out)
@@ -229,6 +232,7 @@ def run(
             seed=seed,
             patch_localization=patch_localization
         )
+        os.system('clear')
 
 
 def single_im():
@@ -242,14 +246,15 @@ def single_im():
 
 
 if __name__ == "__main__":
+    experiments=get_all_subject_experiments('dataset/')
     run(
-        experiments_list=get_all_subject_experiments('dataset/'),
+        experiments_list=experiments,
         dataset_dir='dataset/',
-        root_inputs_dir='brutta_copia/computations/',
-        root_outputs_dir='brutta_copia/computations/',
+        root_inputs_dir='outputs/computations/',
+        root_outputs_dir='outputs/computations/',
         num_images=5,
         imsize=(256,256),
-        seed=0,
+        seed=187372311,
         patch_localization=False
         )
     #single_im()

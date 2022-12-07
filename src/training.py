@@ -76,7 +76,7 @@ def training_pipeline(
     
     print('>>> setting up the model')
     pretext_model = SSLM(num_epochs=projection_training_epochs, lr=projection_training_lr)
-    trainer, cb = get_trainer(0.90, projection_training_epochs, 15)
+    trainer, cb = get_trainer(0.98, projection_training_epochs, 15)
     print('>>> start training (training projection head)')
     trainer.fit(pretext_model, datamodule=datamodule)
     print('>>> training plot')
@@ -86,7 +86,7 @@ def training_pipeline(
     pretext_model.lr = fine_tune_lr
     pretext_model.num_epochs = fine_tune_epochs
     pretext_model.unfreeze_layers(True)
-    trainer, cb = get_trainer(0.95, fine_tune_epochs, 20)
+    trainer, cb = get_trainer(0.98, fine_tune_epochs, 20)
     print('>>> start training (fine tune whole net)') 
     trainer.fit(pretext_model, datamodule=datamodule)
     trainer.save_checkpoint(result_path+checkpoint_name)
@@ -114,6 +114,7 @@ def run(
     pbar = tqdm(range(len(experiments_list)))
     
     for i in pbar:
+        pbar.set_description('Training pipeline | current subject is '+experiments_list[i].upper())
         subject = experiments_list[i]
         training_pipeline(
             dataset_dir=dataset_dir, 
@@ -137,13 +138,13 @@ if __name__ == "__main__":
 
     experiments = get_all_subject_experiments('dataset/')
     run(
-        experiments_list=['toothbrush', 'capsule'],
+        experiments_list=experiments,
         dataset_dir='dataset/', 
         root_outputs_dir='brutta_copia/computations/',
         imsize=(256,256),
         polygoned=True,
         distortion=False,
-        patch_localization=True,
+        patch_localization=False,
         batch_size=96,
         train_val_split=0.2,
         seed=0,

@@ -1,5 +1,5 @@
 from self_supervised.gradcam import GradCam
-from self_supervised.model import GDE, SSLM
+from self_supervised.model import GDE, GDE1, SSLM
 from self_supervised.datasets import *
 from tqdm import tqdm
 import self_supervised.datasets as dt
@@ -112,7 +112,7 @@ def inference_pipeline(
     test_embeddings_gde = torch.nn.functional.normalize(embeddings_mvtec, p=2, dim=1)
     train_embeddings_gde = torch.nn.functional.normalize(train_embeddings_gde, p=2, dim=1)
     
-    gde = GDE()
+    gde = GDE1()
     gde.fit(train_embeddings_gde)
     mvtec_test_scores = gde.predict(test_embeddings_gde)
     mvtec_test_labels = gt2label(gt_mvtec)
@@ -152,37 +152,38 @@ def inference_pipeline(
 
     au_pro = mtr.compute_aupro(all_fprs, all_pros, 0.3)
     
-    if (auc_score > current_auc) and (au_pro > current_aupro) and f_score > current_f1:
+    if (auc_score > current_auc):
         print('>>> plot ROC..')
     
         vis.plot_curve(
             fpr, tpr, 
             auc_score, 
             saving_path=outputs_dir,
-            title='Roc curve for '+subject.upper(),
+            title='Roc curve for '+subject.upper()+' ['+str(seed)+']',
             name='roc.png')
+        
+        print('>>> Generating tsne visualization')
+        y_artificial = y_artificial.tolist() 
+        total_y = y_artificial + y_mvtec
+        total_y = torch.tensor(np.array(total_y))
+        total_embeddings = torch.cat([embeddings_artificial, embeddings_mvtec])
+        vis.plot_tsne(
+            total_embeddings, 
+            total_y, 
+            saving_path=outputs_dir, 
+            title='Embeddings projection for '+subject.upper()+' ['+str(seed)+']')
     
+    if (au_pro > current_aupro): 
         print('>>> plot PRO..')
         vis.plot_curve(
             all_fprs,
             all_pros,
             au_pro,
             saving_path=root_outputs_dir+subject+'/image_level/',
-            title='Pro curve for '+subject.upper(),
+            title='Pro curve for '+subject.upper()+' ['+str(seed)+']',
             name='pro.png'
         )
-    
-        y_artificial = y_artificial.tolist() 
-        total_y = y_artificial + y_mvtec
-        total_y = torch.tensor(np.array(total_y))
-        total_embeddings = torch.cat([embeddings_artificial, embeddings_mvtec])
-    
-        print('>>> Generating tsne visualization')
-        vis.plot_tsne(
-            total_embeddings, 
-            total_y, 
-            saving_path=outputs_dir, 
-            title='Embeddings projection for '+subject.upper())
+        
     return auc_score, f_score, au_pro
 
 
@@ -259,7 +260,7 @@ def run(
         np.mean(aupro_scores))
     
     report = mtr.metrics_to_dataframe(metric_dict, np.array(experiments_list))
-    mtr.export_dataframe(report, saving_path=root_outputs_dir, name='image_level_scores.csv')
+    #mtr.export_dataframe(report, saving_path=root_outputs_dir, name='image_level_scores.csv')
     
 if __name__ == "__main__":
     
@@ -277,7 +278,7 @@ if __name__ == "__main__":
             6155814,
             22612812],
         polygoned=True,
-        distortion=True,
+        distortion=False,
         patch_localization=False,
         batch_size=64,
         imsize=(256,256))

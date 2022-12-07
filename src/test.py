@@ -348,10 +348,35 @@ def other_tests():
     print(auc)  
 #test_pixel_level_metrics()
 
+def black2white(im):
+    data = np.array(im)   # "data" is a height x width x 4 numpy array
+    red, green, blue, alpha = data.T # Temporarily unpack the bands for readability
 
+    # Replace white with red... (leaves alpha values alone...)
+    black_areas = (red < 10) & (blue < 10) & (green < 10)
+    data[..., :-1][black_areas.T] = (255, 255, 255) # Transpose back needed
+
+    return Image.fromarray(data)
+
+
+def white2black(im):
+    data = np.array(im)   # "data" is a height x width x 4 numpy array
+    red, green, blue, alpha = data.T # Temporarily unpack the bands for readability
+
+    # Replace white with red... (leaves alpha values alone...)
+    white_areas = (red > 200) & (blue > 200) & (green > 200)
+    data[..., :-1][white_areas.T] = (0,0,0) # Transpose back needed
+
+    return Image.fromarray(data)
+
+
+
+#np.random.seed(0)
+#random.seed(0)
 x = Image.open('dataset/bottle/train/good/000.png').resize((256,256)).convert('RGB')
 #x = transforms.RandomCrop((64,64))(x)
-y, mask, coords = generate_patch(x, polygoned=True, distortion=True)
+y, mask, coords = generate_polygoned_scar(x, augs=CPP.jitter_transforms, colorized=False)
+#y, mask, coords = generate_patch(x, polygoned=True)
 z = paste_patch(x, y, coords, mask)
 plt.imshow(z)
-plt.savefig('a.png')
+plt.savefig('a.png', bbox_inches='tight')
