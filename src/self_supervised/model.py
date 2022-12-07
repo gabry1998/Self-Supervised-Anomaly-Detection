@@ -25,7 +25,7 @@ class SSLModel(nn.Module):
         
         self.feature_extractor = self.setup_feature_extractor()
         self.projection_head = self.setup_projection_head(dims)
-        self.classifier = nn.Linear(128, self.num_classes)
+        self.classifier = nn.Linear(dims[-1], self.num_classes)
         
         self.localization = False
         #random.seed(seed)
@@ -117,7 +117,8 @@ class SSLM(pl.LightningModule):
     def __init__(
             self,
             num_epochs:int=None,
-            lr:float=CONST.DEFAULT_LEARNING_RATE()):
+            lr:float=CONST.DEFAULT_LEARNING_RATE(),
+            dims=CONST.DEFAULT_PROJECTION_HEAD_DIMS()):
         
         super(SSLM, self).__init__()
         self.save_hyperparameters()
@@ -130,7 +131,7 @@ class SSLM(pl.LightningModule):
         #np.random.seed(seed)
         #torch.random.manual_seed(seed)
         
-        self.model = SSLModel(self.num_classes)
+        self.model = SSLModel(self.num_classes, dims)
         self.localization = False
     
     

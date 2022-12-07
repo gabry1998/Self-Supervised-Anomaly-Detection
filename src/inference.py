@@ -52,7 +52,7 @@ def inference_pipeline(
     
     print('')
     print('>>> Loading model')
-    sslm = SSLM()
+    sslm = SSLM(dims=[512,512,512,512,512,512,512,512,512])
     sslm = SSLM.load_from_checkpoint(model_dir, model=sslm.model)
     sslm.eval()
     if torch.cuda.is_available():
@@ -260,16 +260,17 @@ def run(
         np.mean(aupro_scores))
     
     report = mtr.metrics_to_dataframe(metric_dict, np.array(experiments_list))
-    #mtr.export_dataframe(report, saving_path=root_outputs_dir, name='image_level_scores.csv')
+    mtr.export_dataframe(report, saving_path=root_outputs_dir, name='scores.csv')
+    
     
 if __name__ == "__main__":
     
     experiments = get_all_subject_experiments('dataset/')
     run(
-        experiments_list=experiments,
+        experiments_list=['cable'],
         dataset_dir='dataset/',
-        root_inputs_dir='outputs/computations/',
-        root_outputs_dir='outputs/computations/',
+        root_inputs_dir='brutta_copia/computations/',
+        root_outputs_dir='brutta_copia/computations/',
         num_experiments_for_each_subject=5,
         seed_list=[
             187372311,

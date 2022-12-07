@@ -370,13 +370,15 @@ def white2black(im):
     return Image.fromarray(data)
 
 
+def update_csv(filename, new_item):
+    df = pd.read_csv(filename)
+    name = df.loc[0][0]
+    auc = df.loc[0][1]
+    f1 = df.loc[0][2]
+    pro = df.loc[0][3]
+    print(name, auc, f1, pro)
+    
+update_csv('brutta_copia/computations/scores.csv', _)
 
-#np.random.seed(0)
-#random.seed(0)
-x = Image.open('dataset/bottle/train/good/000.png').resize((256,256)).convert('RGB')
-#x = transforms.RandomCrop((64,64))(x)
-y, mask, coords = generate_polygoned_scar(x, augs=CPP.jitter_transforms, colorized=False)
-#y, mask, coords = generate_patch(x, polygoned=True)
-z = paste_patch(x, y, coords, mask)
-plt.imshow(z)
-plt.savefig('a.png', bbox_inches='tight')
+#with open('outputs/computations/scores.csv','a') as fd:
+    #fd.write(myCsvRow)

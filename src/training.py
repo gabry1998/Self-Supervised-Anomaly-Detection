@@ -75,7 +75,10 @@ def training_pipeline(
     )
     
     print('>>> setting up the model')
-    pretext_model = SSLM(num_epochs=projection_training_epochs, lr=projection_training_lr)
+    pretext_model = SSLM(
+        num_epochs=projection_training_epochs, 
+        lr=projection_training_lr,
+        dims=[512,512,512,512,512,512,512,512,512])
     trainer, cb = get_trainer(0.98, projection_training_epochs, 15)
     print('>>> start training (training projection head)')
     trainer.fit(pretext_model, datamodule=datamodule)
@@ -138,7 +141,7 @@ if __name__ == "__main__":
 
     experiments = get_all_subject_experiments('dataset/')
     run(
-        experiments_list=experiments,
+        experiments_list=['cable'],
         dataset_dir='dataset/', 
         root_outputs_dir='brutta_copia/computations/',
         imsize=(256,256),
