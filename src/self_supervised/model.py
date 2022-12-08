@@ -1,17 +1,17 @@
 from sklearn.covariance import LedoitWolf
+from sklearn.neighbors import KernelDensity
 from torch import nn
 import torch
 from torchvision import models
 import pytorch_lightning as pl
 import torch.nn.functional as F
 from torchmetrics.functional import accuracy
-import random
 import numpy as np
-from sklearn.neighbors import KernelDensity
 import self_supervised.support.constants as CONST
 from numpy import array
 from torch import Tensor
-import time
+from numpy import dot
+from numpy.linalg import norm
 
 
 class SSLModel(nn.Module):
@@ -232,7 +232,25 @@ class MetricTracker(pl.Callback):
     self.log_metrics['val']['accuracy'].append(elogs['val_accuracy'].item())
     self.log_metrics['val']['loss'].append(elogs['val_loss'].item())
 
-class GDE1():
+
+class CosineSimilarityEstimator():
+    def __init__(self, embeddings) -> None:
+        #shape of (batch, num_patches, embedding_size)
+        self.data = embeddings
+        
+    def fit(self):
+        self.average_good = torch.mean(self.data, axis=0)
+        
+    
+    def _compute(self, a, b):
+        return dot(a, b)/(norm(a)*norm(b))
+    
+    def predict(self, embeddings:Tensor):
+        #shape of (num_patches, embedding_size)
+        return torch.tensor([self._compute(embeddings[i], self.average_good[i]) for i in range(len(embeddings))])
+
+
+class GDE():
     def __init__(self) -> None:
         pass
         
@@ -241,17 +259,15 @@ class GDE1():
         
         
     def predict(self, embeddings:Tensor):
-        start = time.time()
-        scores = np.array(self.kde.score_samples(embeddings))
-        end = time.time() -start
-        #print(end)
+        scores = self.kde.score_samples(embeddings)
         norm = np.linalg.norm(-scores)
-        scores = -(scores/norm)
-        return torch.tensor(scores)
-    
-class GDE(object):
-    def fit(self, embeddings:Tensor):
-        self.mean = torch.mean(embeddings, axis=0)
+        return torch.tensor(-scores/norm)
+
+      
+class MahalanobisDistance(object):
+    def fit(self, embeddings:Tensor, mean:Tensor):
+        #self.mean = torch.mean(embeddings, axis=0)
+        self.mean = mean
         self.inv_cov = torch.Tensor(LedoitWolf().fit(embeddings.cpu()).precision_,device="cpu")
 
     def predict(self, embeddings:Tensor):

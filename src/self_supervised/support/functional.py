@@ -119,28 +119,6 @@ def normalize_in_interval(sample_mat, interval_min, interval_max):
     return x
 
 
-def black2white(im):
-    data = np.array(im)   # "data" is a height x width x 4 numpy array
-    red, green, blue, alpha = data.T # Temporarily unpack the bands for readability
-
-    # Replace white with red... (leaves alpha values alone...)
-    black_areas = (red < 50) & (blue < 50) & (green < 50)
-    data[..., :-1][black_areas.T] = (255, 255, 255) # Transpose back needed
-
-    return Image.fromarray(data)
-
-
-def white2black(im):
-    data = np.array(im)   # "data" is a height x width x 4 numpy array
-    red, green, blue, alpha = data.T # Temporarily unpack the bands for readability
-
-    # Replace white with red... (leaves alpha values alone...)
-    white_areas = (red > 200) & (blue > 200) & (green > 200)
-    data[..., :-1][white_areas.T] = (0,0,0) # Transpose back needed
-
-    return Image.fromarray(data)
-
-
 class GaussianSmooth:
     def __init__(self, kernel_size=32, stride=4, std=None, device=None):
         self.kernel_size = kernel_size
@@ -171,7 +149,7 @@ class GaussianSmooth:
     def upsample(self, X):
         tconv = torch.nn.ConvTranspose2d(
             1,
-            1, 
+            1,
             kernel_size=self.kernel_size, 
             stride=self.stride)
         

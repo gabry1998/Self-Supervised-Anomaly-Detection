@@ -12,6 +12,7 @@ import numpy as np
 
 
 
+
 def do_inference(model, x):
     if torch.cuda.is_available():
         y_hat, embeddings = model(x.to('cuda'))
@@ -105,14 +106,14 @@ def inference_pipeline(
     print('>>> Embeddings for GDE..')
     start = time.time()
     x_train_mvtec, _ = next(iter(mvtec.train_dataloader())) 
-    _, train_embeddings_gde = do_inference(sslm, x_train_mvtec)
-    
+    y_hat_gde, train_embeddings_gde = do_inference(sslm, x_train_mvtec)
+    y_hat_gde = multiclass2binary(y_hat_gde)
     embeddings_mvtec = embeddings_mvtec.to('cpu').detach()
     train_embeddings_gde = train_embeddings_gde.to('cpu').detach()
     test_embeddings_gde = torch.nn.functional.normalize(embeddings_mvtec, p=2, dim=1)
     train_embeddings_gde = torch.nn.functional.normalize(train_embeddings_gde, p=2, dim=1)
     
-    gde = GDE1()
+    gde = GDE()
     gde.fit(train_embeddings_gde)
     mvtec_test_scores = gde.predict(test_embeddings_gde)
     mvtec_test_labels = gt2label(gt_mvtec)
@@ -209,13 +210,14 @@ def run(
     auc_scores = []
     f1_scores= []
     aupro_scores = []
-    auc_score = 0
-    aupro_score = 0
+    
     for i in pbar:
         subject = experiments_list[i]
         temp_auc = []
         temp_f1 = []
         temp_aupro = []
+        auc_score = -1
+        aupro_score = -1
         for j in range(num_experiments_for_each_subject):
             seed = seed_list[j]
             pbar.set_description('Inference pipeline | current subject is '+experiments_list[i].upper())
@@ -260,14 +262,14 @@ def run(
         np.mean(aupro_scores))
     
     report = mtr.metrics_to_dataframe(metric_dict, np.array(experiments_list))
-    mtr.export_dataframe(report, saving_path=root_outputs_dir, name='scores.csv')
+    #mtr.export_dataframe(report, saving_path=root_outputs_dir, name='scores.csv')
     
     
 if __name__ == "__main__":
     
     experiments = get_all_subject_experiments('dataset/')
     run(
-        experiments_list=['cable'],
+        experiments_list=['bottle'],
         dataset_dir='dataset/',
         root_inputs_dir='brutta_copia/computations/',
         root_outputs_dir='brutta_copia/computations/',
@@ -276,7 +278,7 @@ if __name__ == "__main__":
             187372311,
             204110176,
             129995678,
-            6155814,
+            123456789,
             22612812],
         polygoned=True,
         distortion=False,

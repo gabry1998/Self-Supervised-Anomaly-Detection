@@ -370,15 +370,9 @@ def white2black(im):
     return Image.fromarray(data)
 
 
-def update_csv(filename, new_item):
-    df = pd.read_csv(filename)
-    name = df.loc[0][0]
-    auc = df.loc[0][1]
-    f1 = df.loc[0][2]
-    pro = df.loc[0][3]
-    print(name, auc, f1, pro)
-    
-update_csv('brutta_copia/computations/scores.csv', _)
-
-#with open('outputs/computations/scores.csv','a') as fd:
-    #fd.write(myCsvRow)
+x = torch.tensor([])
+print(x)
+x = torch.concatenate([x, torch.tensor([1,1,2])])
+print(x)
+x = torch.concatenate([x, torch.tensor([1,3,4])], dim=0)
+print(x)

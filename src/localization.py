@@ -106,6 +106,7 @@ def patch_level_localization(
     
     outputs_dir = root_outputs_dir+subject+'/patch_level/gradcam/'
     model_input_dir = root_inputs_dir+subject+'/patch_level/best_model.ckpt'
+    classifier_input_dir = root_inputs_dir+subject+'/image_level/best_model.ckpt'
     
     sslm = md.SSLM.load_from_checkpoint(
     model_input_dir)
@@ -113,8 +114,16 @@ def patch_level_localization(
     sslm.eval()
     sslm.unfreeze_layers(False)
     
+    classifier = md.SSLM.load_from_checkpoint(
+    classifier_input_dir)
+    classifier.to('cuda')
+    classifier.eval()
+    classifier.unfreeze_layers(False)
     train_embeddings_gde = []
-    train_gde_imgs = random.sample(list(datamodule.train_dataloader().dataset.images_filenames), 4)
+    n = 30
+    train_gde_imgs = random.sample(
+        list(datamodule.train_dataloader().dataset.images_filenames), 
+        n)
     for i in range(len(train_gde_imgs)):
         #print(train_gde_imgs[i])
         train_img_tensor = Image.open(train_gde_imgs[i]).resize((256,256)).convert('RGB')
@@ -125,13 +134,14 @@ def patch_level_localization(
         
         train_patches = extract_patches(train_img_tensor_norm, 32, 4)
         _, train_embedding = sslm(train_patches.to('cuda'))
-        train_embeddings_gde.append(train_embedding.to('cpu'))
+        train_embeddings_gde.append(train_embedding.to('cpu')[None, :])
+        
     train_embedding = torch.cat(train_embeddings_gde, dim=0)
-    gde = md.GDE()
-    #print(train_embedding.shape)
-    
+    mean = torch.mean(train_embedding, axis=0)
     train_embedding = torch.nn.functional.normalize(train_embedding, p=2, dim=1)
-    gde.fit(train_embedding)
+    gde = md.GDE()
+    gde.fit(mean)
+    
     j = len(datamodule.test_dataset)-1
     loc_bar = tqdm(range(num_images), desc='localizing defects', position=1)
     for i in loc_bar:
@@ -139,25 +149,30 @@ def patch_level_localization(
         input_tensor_norm = transforms.Normalize(
             (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(input_image_tensor)
         input_tensor_norm = input_tensor_norm.unsqueeze(0)
-        patches = extract_patches(input_tensor_norm, 32, 4)
-        y_hat, embeddings = sslm(patches.to('cuda'))
-        y_hat = get_prediction_class(y_hat.to('cpu'))
-        embeddings = embeddings.to('cpu')
-        embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
-        mvtec_test_scores = gde.predict(embeddings)
-        dim = int(np.sqrt(embeddings.shape[0]))
-        out = torch.reshape(mvtec_test_scores, (dim, dim))
-        out = normalize(out)
-        #out[out < 0.35] = 0
-        gs = GaussianSmooth(device='cpu')
-        out = gs.upsample(out[None, None, :])
-        out = normalize(out)
-        
+        pred, _ = classifier(input_tensor_norm.to('cuda'))
+        pred = get_prediction_class(pred.to('cpu'))
+        if pred > 0:
+            patches = extract_patches(input_tensor_norm, 32, 4)
+            y_hat, embeddings = sslm(patches.to('cuda'))
+            y_hat = get_prediction_class(y_hat.to('cpu'))
+            embeddings = embeddings.to('cpu')
+            embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
+            mvtec_test_scores = gde.predict(embeddings)
+            mvtec_test_scores = normalize(mvtec_test_scores)
+            dim = int(np.sqrt(embeddings.shape[0]))
+            out = torch.reshape(mvtec_test_scores, (dim, dim))
+            out[out < 0.35] = 0
+            gs = GaussianSmooth(device='cpu')
+            out = gs.upsample(out[None, None, :])
+            out = normalize(out)
+            
+        else:
+            out = torch.zeros((256,256))
         heatmap = localize(input_image_tensor[None, :], out)
         image = imagetensor2array(input_image_tensor)
         heatmap = np.uint8(255 * heatmap)
         image = np.uint8(255 * image)
-        #plot_heatmap(image, heatmap, saving_path=gradcam_dir, name='heatmap_'+str(i)+'.png')
+        
         gt = imagetensor2array(gt)
         plot_heatmap_and_masks(
             image, 
@@ -250,12 +265,12 @@ if __name__ == "__main__":
     run(
         experiments_list=experiments,
         dataset_dir='dataset/',
-        root_inputs_dir='outputs/computations/',
-        root_outputs_dir='outputs/computations/',
-        num_images=5,
+        root_inputs_dir='brutta_copia/computations/',
+        root_outputs_dir='brutta_copia/computations/',
+        num_images=3,
         imsize=(256,256),
         seed=187372311,
-        patch_localization=False
+        patch_localization=True
         )
     #single_im()
     
