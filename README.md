@@ -116,9 +116,9 @@ toothbrush |  0.85  |	0.81 |	0.4
 zipper     |  0.97  |	0.91 |  0.56
 ### Other Examples
 
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/cable/image_level/gradcam/heatmap_and_masks_1.png"/>
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/capsule/image_level/gradcam/heatmap_and_masks_1.png"/>
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/screw/image_level/gradcam/heatmap_and_masks_1.png"/>
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/tile/image_level/gradcam/heatmap_and_masks_1.png"/>
+<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/cable/image_level/gradcam/heatmap_and_masks_0.png"/>
+<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/capsule/image_level/gradcam/heatmap_and_masks_0.png"/>
+<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/screw/image_level/gradcam/heatmap_and_masks_0.png"/>
+<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/tile/image_level/gradcam/heatmap_and_masks_0.png"/>
 <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/toothbrush/image_level/gradcam/heatmap_and_masks_0.png"/>
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/zipper/image_level/gradcam/heatmap_and_masks_2.png"/> 
+<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/zipper/image_level/gradcam/heatmap_and_masks_0.png"/> 
