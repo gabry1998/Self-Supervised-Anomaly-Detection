@@ -269,7 +269,7 @@ if __name__ == "__main__":
         root_outputs_dir='outputs/computations/',
         num_images=3,
         imsize=(256,256),
-        seed=123456789,
+        seed=204110176,
         patch_localization=False
         )
     #single_im()
