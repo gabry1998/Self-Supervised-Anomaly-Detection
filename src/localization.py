@@ -265,12 +265,12 @@ if __name__ == "__main__":
     run(
         experiments_list=experiments,
         dataset_dir='dataset/',
-        root_inputs_dir='brutta_copia/computations/',
-        root_outputs_dir='brutta_copia/computations/',
+        root_inputs_dir='outputs/computations/',
+        root_outputs_dir='outputs/computations/',
         num_images=3,
         imsize=(256,256),
         seed=187372311,
-        patch_localization=True
+        patch_localization=False
         )
     #single_im()
     
