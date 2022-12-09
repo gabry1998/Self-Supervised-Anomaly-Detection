@@ -1,5 +1,5 @@
 from self_supervised.gradcam import GradCam
-from self_supervised.model import GDE, GDE1, SSLM
+from self_supervised.model import GDE, SSLM
 from self_supervised.datasets import *
 from tqdm import tqdm
 import self_supervised.datasets as dt
@@ -10,7 +10,10 @@ import time
 import random
 import numpy as np
 
-
+class Tracker:
+    def __init__(self) -> None:
+        self.auc = -1
+        self.aupro = -1
 
 
 def do_inference(model, x):
@@ -36,9 +39,7 @@ def inference_pipeline(
         seed:int=CONST.DEFAULT_SEED(),
         batch_size:int=CONST.DEFAULT_BATCH_SIZE(),
         imsize:int=CONST.DEFAULT_IMSIZE(),
-        current_auc:int=0,
-        current_f1:int=0,
-        current_aupro:int=0):
+        tracker:Tracker=None):
     
     np.random.seed(seed)
     random.seed(seed)
@@ -140,8 +141,8 @@ def inference_pipeline(
         if predicted_class == 0:
             saliency_map = torch.zeros((256,256))[None, :]
         else:
-            if predicted_class > 1:
-                predicted_class = 1
+            #if predicted_class > 1:
+            #    predicted_class = 1
             x = x_mvtec[i]
             saliency_map = gradcam(x[None, :], test_y_hat[i])
         anomaly_maps.append(np.array(saliency_map.squeeze()))
@@ -153,9 +154,9 @@ def inference_pipeline(
 
     au_pro = mtr.compute_aupro(all_fprs, all_pros, 0.3)
     
-    if (auc_score > current_auc):
+    if (auc_score > tracker.auc):
         print('>>> plot ROC..')
-    
+        tracker.auc = auc_score
         vis.plot_curve(
             fpr, tpr, 
             auc_score, 
@@ -174,8 +175,9 @@ def inference_pipeline(
             saving_path=outputs_dir, 
             title='Embeddings projection for '+subject.upper()+' ['+str(seed)+']')
     
-    if (au_pro > current_aupro): 
+    if (au_pro > tracker.aupro): 
         print('>>> plot PRO..')
+        tracker.aupro = au_pro
         vis.plot_curve(
             all_fprs,
             all_pros,
@@ -185,7 +187,7 @@ def inference_pipeline(
             name='pro.png'
         )
         
-    return auc_score, f_score, au_pro
+    return auc_score, f_score, au_pro, tracker
 
 
 def run(
@@ -218,13 +220,14 @@ def run(
         temp_aupro = []
         auc_score = -1
         aupro_score = -1
+        metric_tracker = Tracker()
         for j in range(num_experiments_for_each_subject):
             seed = seed_list[j]
             pbar.set_description('Inference pipeline | current subject is '+experiments_list[i].upper())
             print('')
             print('Running experiment '+str(j+1)+'/'+str(num_experiments_for_each_subject))
             print('Experiment seed:', str(seed))
-            auc_score, f_score, aupro_score = inference_pipeline(
+            auc_score, f_score, aupro_score, metric_tracker = inference_pipeline(
                 dataset_dir=dataset_dir,
                 root_inputs_dir=root_inputs_dir,
                 root_outputs_dir=root_outputs_dir,
@@ -235,8 +238,7 @@ def run(
                 seed=seed,
                 batch_size=batch_size,
                 imsize=imsize,
-                current_auc=auc_score,
-                current_aupro=aupro_score)
+                tracker=metric_tracker)
             temp_auc.append(auc_score)
             temp_f1.append(f_score)
             temp_aupro.append(aupro_score)
@@ -262,14 +264,14 @@ def run(
         np.mean(aupro_scores))
     
     report = mtr.metrics_to_dataframe(metric_dict, np.array(experiments_list))
-    #mtr.export_dataframe(report, saving_path=root_outputs_dir, name='scores.csv')
+    mtr.export_dataframe(report, saving_path=root_outputs_dir, name='scores.csv')
     
     
 if __name__ == "__main__":
     
     experiments = get_all_subject_experiments('dataset/')
     run(
-        experiments_list=['bottle'],
+        experiments_list=experiments,
         dataset_dir='dataset/',
         root_inputs_dir='brutta_copia/computations/',
         root_outputs_dir='brutta_copia/computations/',

@@ -77,8 +77,8 @@ def image_level_localization(
         if predicted_class == 0:
             saliency_map = torch.zeros((256,256))[None, None, :]
         else:
-            if predicted_class > 1:
-                predicted_class = 1
+            #if predicted_class > 1:
+            #    predicted_class = 1
             saliency_map = gradcam(input_tensor_norm[None, :], predicted_class)
         heatmap = localize(input_image_tensor[None, :], saliency_map)
         image = imagetensor2array(input_image_tensor)

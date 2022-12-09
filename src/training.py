@@ -22,6 +22,7 @@ def get_trainer(stopping_threshold, epochs, reload_dataloaders_every_n_epochs):
         accelerator='auto', 
         devices=1, 
         max_epochs=epochs, 
+        min_epochs=5,
         check_val_every_n_epoch=1,
         reload_dataloaders_every_n_epochs=reload_dataloaders_every_n_epochs)
     return trainer, cb
@@ -141,13 +142,13 @@ if __name__ == "__main__":
 
     experiments = get_all_subject_experiments('dataset/')
     run(
-        experiments_list=['bottle'],
+        experiments_list=experiments,
         dataset_dir='dataset/', 
         root_outputs_dir='brutta_copia/computations/',
         imsize=(256,256),
         polygoned=True,
         distortion=False,
-        patch_localization=True,
+        patch_localization=False,
         batch_size=96,
         train_val_split=0.2,
         seed=0,

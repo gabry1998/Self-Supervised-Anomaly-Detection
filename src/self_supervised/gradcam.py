@@ -42,7 +42,8 @@ class GradCam:
     
         saliency_map = (weights*activations).sum(1, keepdim=True)
         saliency_map = F.relu(saliency_map)
-        saliency_map = F.upsample(saliency_map, size=(h, w), mode='bilinear', align_corners=False)
+        #saliency_map = F.upsample(saliency_map, size=(h, w), mode='bilinear', align_corners=False)
+        saliency_map = F.interpolate(saliency_map, size=(h,w), mode='bilinear')
         saliency_map_min, saliency_map_max = saliency_map.min(), saliency_map.max()
         saliency_map = (saliency_map - saliency_map_min).div(saliency_map_max - saliency_map_min).data
 

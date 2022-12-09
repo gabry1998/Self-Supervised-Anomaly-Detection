@@ -166,7 +166,7 @@ class GenerativeDataset(Dataset):
             return x
         if y == 1:
             #x = generate_rotation(x)
-            patch, mask, coords = generate_patch(
+            patch, mask, coords = generate_patch_new(
                 image=x, 
                 area_ratio=self.area_ratio, 
                 aspect_ratio=self.aspect_ratio, 
@@ -177,12 +177,19 @@ class GenerativeDataset(Dataset):
             return x
         if y == 2:
             #x = generate_rotation(x)
-            patch, coords = generate_scar_new(
-                x, 
-                self.scar_width, 
-                self.scar_thiccness, 
+            patch, coords = generate_scar_centered(
+                x,
+                self.scar_width,
+                self.scar_thiccness,
                 CPP.jitter_transforms,
-                with_padding=True)
+                with_padding=False
+            )
+            #patch, coords = generate_scar_new(
+            #    x, 
+            #    self.scar_width, 
+            #    self.scar_thiccness, 
+            #    CPP.jitter_transforms,
+            #    with_padding=True)
             x = paste_patch(x, patch, coords, patch)
             return x
 
