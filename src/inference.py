@@ -271,7 +271,7 @@ if __name__ == "__main__":
     
     experiments = get_all_subject_experiments('dataset/')
     run(
-        experiments_list=experiments,
+        experiments_list=['grid', 'screw'],
         dataset_dir='dataset/',
         root_inputs_dir='brutta_copia/computations/',
         root_outputs_dir='brutta_copia/computations/',

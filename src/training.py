@@ -15,16 +15,15 @@ def get_trainer(stopping_threshold, epochs, reload_dataloaders_every_n_epochs):
         monitor="val_accuracy",
         stopping_threshold=stopping_threshold,
         mode='max',
-        patience=5
+        patience=3
     )
     trainer = pl.Trainer(
         callbacks= [cb, early_stopping],
         accelerator='auto', 
         devices=1, 
-        max_epochs=epochs, 
-        min_epochs=5,
-        check_val_every_n_epoch=1,
-        reload_dataloaders_every_n_epochs=reload_dataloaders_every_n_epochs)
+        max_epochs=epochs,
+        check_val_every_n_epoch=1)
+        #reload_dataloaders_every_n_epochs=reload_dataloaders_every_n_epochs)
     return trainer, cb
 
 
@@ -35,6 +34,7 @@ def training_pipeline(
         imsize:tuple=CONST.DEFAULT_IMSIZE(),
         polygoned=False,
         distortion=False,
+        colorized_scar=False,
         patch_localization:bool=False,
         batch_size:int=CONST.DEFAULT_BATCH_SIZE(),
         train_val_split:float=CONST.DEFAULT_TRAIN_VAL_SPLIT(),
@@ -56,11 +56,13 @@ def training_pipeline(
     
     print('result dir:', result_path)
     print('checkpoint name:', checkpoint_name)
+    print('polygoned:', polygoned)
     print('distortion:', distortion)
+    print('colorized scar:', colorized_scar)
     print('patch localization:', patch_localization)
     
-    np.random.seed(seed)
-    random.seed(seed)
+    #np.random.seed(seed)
+    #random.seed(seed)
     
     print('>>> preparing datamodule')
     datamodule = GenerativeDatamodule(
@@ -72,7 +74,8 @@ def training_pipeline(
         duplication=True,
         patch_localization=patch_localization,
         polygoned=polygoned,
-        distortion=distortion
+        distortion=distortion,
+        colorized_scar=colorized_scar
     )
     
     print('>>> setting up the model')
@@ -105,6 +108,7 @@ def run(
         imsize:tuple=CONST.DEFAULT_IMSIZE(),
         polygoned=True,
         distortion=False,
+        colorized_scar=False,
         patch_localization:bool=False,
         batch_size:int=CONST.DEFAULT_BATCH_SIZE(),
         train_val_split:float=CONST.DEFAULT_TRAIN_VAL_SPLIT(),
@@ -127,6 +131,7 @@ def run(
             imsize=imsize,
             polygoned=polygoned,
             distortion=distortion,
+            colorized_scar=colorized_scar,
             patch_localization=patch_localization,
             batch_size=batch_size,
             train_val_split=train_val_split,
@@ -142,19 +147,20 @@ if __name__ == "__main__":
 
     experiments = get_all_subject_experiments('dataset/')
     run(
-        experiments_list=experiments,
+        experiments_list=['grid', 'screw'],
         dataset_dir='dataset/', 
         root_outputs_dir='brutta_copia/computations/',
         imsize=(256,256),
         polygoned=True,
         distortion=False,
+        colorized_scar=False,
         patch_localization=False,
         batch_size=96,
         train_val_split=0.2,
         seed=0,
         projection_training_lr=0.003,
         projection_training_epochs=30,
-        fine_tune_lr=0.001,
+        fine_tune_lr=0.0003,
         fine_tune_epochs=20
     )
         

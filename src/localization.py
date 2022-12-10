@@ -263,10 +263,10 @@ def single_im():
 if __name__ == "__main__":
     experiments=get_all_subject_experiments('dataset/')
     run(
-        experiments_list=experiments,
+        experiments_list=['bottle', 'cable', 'capsule', 'screw'],
         dataset_dir='dataset/',
-        root_inputs_dir='outputs/computations/',
-        root_outputs_dir='outputs/computations/',
+        root_inputs_dir='brutta_copia/computations/',
+        root_outputs_dir='brutta_copia/computations/',
         num_images=3,
         imsize=(256,256),
         seed=204110176,
