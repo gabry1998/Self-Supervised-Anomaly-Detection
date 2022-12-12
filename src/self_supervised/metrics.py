@@ -24,7 +24,7 @@ def export_dataframe(dataframe:pd.DataFrame, saving_path:str=None, name:str='rep
 
 
 def compute_f1(targets:Tensor, predictions:Tensor):
-    f1 = f1_score(targets, predictions)
+    f1 = f1_score(targets, predictions, average='weighted')
     return f1
 
 

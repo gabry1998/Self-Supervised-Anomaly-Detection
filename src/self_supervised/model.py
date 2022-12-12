@@ -1,3 +1,4 @@
+from math import sqrt
 from sklearn.covariance import LedoitWolf
 from sklearn.neighbors import KernelDensity
 from torch import nn
@@ -20,23 +21,21 @@ class SSLModel(nn.Module):
                 dims:array = CONST.DEFAULT_PROJECTION_HEAD_DIMS()):
         
         super().__init__()
-        #self.seed = seed
         self.num_classes = num_classes
         
         self.feature_extractor = self.setup_feature_extractor()
         self.projection_head = self.setup_projection_head(dims)
         self.classifier = nn.Linear(dims[-1], self.num_classes)
         
+        self.dropout = nn.Dropout(0.25)
         self.localization = False
-        #random.seed(seed)
-        #np.random.seed(seed)
-        #torch.random.manual_seed(seed)
-
+        
     
     def setup_projection_head(self, dims):
         proj_layers = []
         for d in dims[:-1]:
-            proj_layers.append(nn.Linear(d,d, bias=False)),
+            layer = nn.Linear(d,d, bias=False)
+            proj_layers.append(layer),
             proj_layers.append((nn.BatchNorm1d(d))),
             proj_layers.append(nn.ReLU(inplace=True))
         embeds = nn.Linear(dims[-2], dims[-1], bias=self.num_classes > 0)
@@ -106,7 +105,7 @@ class SSLModel(nn.Module):
         x = x.float()
         features = self.feature_extractor(x)
         features = torch.flatten(features, 1)
-        embeddings = self.projection_head(features)
+        embeddings = self.dropout(self.projection_head(features))
         output = self.classifier(embeddings)
         if self.localization:
             return output
@@ -125,16 +124,11 @@ class SSLM(pl.LightningModule):
         self.lr = lr
         self.num_classes = 3
         self.num_epochs = num_epochs
-        #self.seed = seed
-
-        #random.seed(seed)
-        #np.random.seed(seed)
-        #torch.random.manual_seed(seed)
         
         self.model = SSLModel(self.num_classes, dims)
         self.localization = False
-    
-    
+            
+            
     def unfreeze_layers(self, p=True):
         self.model.unfreeze_layers(p)
     

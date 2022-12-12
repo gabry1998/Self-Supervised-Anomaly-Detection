@@ -349,7 +349,7 @@ def test_centering():
         plt.close()
         
         factor = 2.25
-        y, coords = generate_scar_centered(img,augs=CPP.jitter_transforms, with_padding=False, colorized=True, factor=factor)
+        y, coords = generate_scar_centered(img,augs=CPP.jitter_transforms, with_padding=False, colorized=False, factor=factor)
         #y = apply_jittering(y, CPP.jitter_transforms)
         x = paste_patch(img, y, coords, y)
         

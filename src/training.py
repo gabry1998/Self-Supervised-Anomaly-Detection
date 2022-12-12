@@ -12,18 +12,18 @@ import random
 def get_trainer(stopping_threshold, epochs, reload_dataloaders_every_n_epochs):
     cb = MetricTracker()
     early_stopping = EarlyStopping(
-        monitor="val_accuracy",
+        monitor="val_loss",
         stopping_threshold=stopping_threshold,
-        mode='max',
-        patience=3
+        mode='min',
+        patience=5
     )
     trainer = pl.Trainer(
         callbacks= [cb, early_stopping],
         accelerator='auto', 
         devices=1, 
         max_epochs=epochs,
-        check_val_every_n_epoch=1)
-        #reload_dataloaders_every_n_epochs=reload_dataloaders_every_n_epochs)
+        check_val_every_n_epoch=1,
+        reload_dataloaders_every_n_epochs=reload_dataloaders_every_n_epochs)
     return trainer, cb
 
 
@@ -61,8 +61,8 @@ def training_pipeline(
     print('colorized scar:', colorized_scar)
     print('patch localization:', patch_localization)
     
-    #np.random.seed(seed)
-    #random.seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
     
     print('>>> preparing datamodule')
     datamodule = GenerativeDatamodule(
@@ -83,7 +83,7 @@ def training_pipeline(
         num_epochs=projection_training_epochs, 
         lr=projection_training_lr,
         dims=[512,512,512,512,512,512,512,512,512])
-    trainer, cb = get_trainer(0.98, projection_training_epochs, 15)
+    trainer, cb = get_trainer(0.1, projection_training_epochs, 15)
     print('>>> start training (training projection head)')
     trainer.fit(pretext_model, datamodule=datamodule)
     print('>>> training plot')
@@ -93,7 +93,7 @@ def training_pipeline(
     pretext_model.lr = fine_tune_lr
     pretext_model.num_epochs = fine_tune_epochs
     pretext_model.unfreeze_layers(True)
-    trainer, cb = get_trainer(0.98, fine_tune_epochs, 20)
+    trainer, cb = get_trainer(0.1, fine_tune_epochs, 20)
     print('>>> start training (fine tune whole net)') 
     trainer.fit(pretext_model, datamodule=datamodule)
     trainer.save_checkpoint(result_path+checkpoint_name)
@@ -147,7 +147,7 @@ if __name__ == "__main__":
 
     experiments = get_all_subject_experiments('dataset/')
     run(
-        experiments_list=['grid', 'screw'],
+        experiments_list=['toothbrush', 'transistor', 'zipper'],
         dataset_dir='dataset/', 
         root_outputs_dir='brutta_copia/computations/',
         imsize=(256,256),
@@ -160,7 +160,7 @@ if __name__ == "__main__":
         seed=0,
         projection_training_lr=0.003,
         projection_training_epochs=30,
-        fine_tune_lr=0.0003,
+        fine_tune_lr=0.001,
         fine_tune_epochs=20
     )
         

@@ -33,8 +33,9 @@ def inference_pipeline(
         root_inputs_dir:str,
         root_outputs_dir:str,
         subject:str,
-        polygoned:bool=True,
+        polygoned:bool=False,
         distortion:bool=False,
+        colorized_scar:bool=False,
         patch_localization=False,
         seed:int=CONST.DEFAULT_SEED(),
         batch_size:int=CONST.DEFAULT_BATCH_SIZE(),
@@ -69,7 +70,8 @@ def inference_pipeline(
         min_dataset_length=500,
         patch_localization=patch_localization,
         polygoned=polygoned,
-        distortion=distortion
+        distortion=distortion,
+        colorized_scar=colorized_scar,
     )
     artificial.setup('test')
     
@@ -141,8 +143,8 @@ def inference_pipeline(
         if predicted_class == 0:
             saliency_map = torch.zeros((256,256))[None, :]
         else:
-            #if predicted_class > 1:
-            #    predicted_class = 1
+            if predicted_class > 1:
+                predicted_class = 1
             x = x_mvtec[i]
             saliency_map = gradcam(x[None, :], test_y_hat[i])
         anomaly_maps.append(np.array(saliency_map.squeeze()))
@@ -197,8 +199,9 @@ def run(
         root_outputs_dir:str,
         num_experiments_for_each_subject:int=1,
         seed_list:list=[0],
-        polygoned=True,
+        polygoned:bool=False,
         distortion:bool=False,
+        colorized_scar=False,
         patch_localization=False,
         batch_size:int=128,
         imsize:int=CONST.DEFAULT_IMSIZE()):
@@ -234,6 +237,7 @@ def run(
                 subject=subject,
                 polygoned=polygoned,
                 distortion=distortion,
+                colorized_scar=colorized_scar,
                 patch_localization=patch_localization,
                 seed=seed,
                 batch_size=batch_size,
@@ -264,14 +268,14 @@ def run(
         np.mean(aupro_scores))
     
     report = mtr.metrics_to_dataframe(metric_dict, np.array(experiments_list))
-    mtr.export_dataframe(report, saving_path=root_outputs_dir, name='scores.csv')
+    mtr.export_dataframe(report, saving_path=root_outputs_dir, name='s.csv')
     
     
 if __name__ == "__main__":
     
     experiments = get_all_subject_experiments('dataset/')
     run(
-        experiments_list=['grid', 'screw'],
+        experiments_list=experiments,
         dataset_dir='dataset/',
         root_inputs_dir='brutta_copia/computations/',
         root_outputs_dir='brutta_copia/computations/',
@@ -284,6 +288,7 @@ if __name__ == "__main__":
             22612812],
         polygoned=True,
         distortion=False,
+        colorized_scar=False,
         patch_localization=False,
         batch_size=64,
         imsize=(256,256))

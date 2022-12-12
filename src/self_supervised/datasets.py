@@ -135,7 +135,7 @@ class GenerativeDataset(Dataset):
         self.patch_size = patch_size
         self.polygoned = polygons
         
-        #self.labels = self.generate_labels()
+        self.labels = self.generate_labels()
 
  
     def generate_labels(self):
@@ -145,8 +145,8 @@ class GenerativeDataset(Dataset):
 
     def __getitem__(self, index):
         x = self.images_filenames[index]
-        #y = self.labels[index]
-        y = random.randint(0, 2)
+        y = self.labels[index]
+        #y = random.randint(0, 2)
         
         x = self.generate_cutpaste_3way(x, y)
         
@@ -160,8 +160,9 @@ class GenerativeDataset(Dataset):
     
     
     def generate_cutpaste_3way(self, x, y):
-        patch_factor = 1.75
-        scar_factor = 2.25
+        patch_factor = 2
+        scar_factor = 2.5
+        scar_type = 'swirl'
         x = Image.open(x).resize(self.imsize).convert('RGB')
         if self.patch_localization:
             cropper = Container(x.size, 1.5)
@@ -185,16 +186,23 @@ class GenerativeDataset(Dataset):
             return x
         if y == 2:
             #x = generate_rotation(x)
-            patch, coords = generate_scar_centered(
-                x,
-                self.scar_width,
-                self.scar_thiccness,
-                CPP.jitter_transforms,
-                with_padding=False,
-                colorized=self.colorized_scar,
-                factor=scar_factor
-            )
-            x = paste_patch(x, patch, coords, patch)
+            if scar_type=='normal':
+                patch, coords = generate_scar_centered(
+                    x,
+                    self.scar_width,
+                    self.scar_thiccness,
+                    CPP.jitter_transforms,
+                    with_padding=True,
+                    colorized=self.colorized_scar,
+                    factor=scar_factor
+                )
+                x = paste_patch(x, patch, coords, patch)
+            if scar_type=='swirl':
+                x = generate_swirl_centered(
+                    x,
+                    factor=scar_factor,
+                    swirl_radius=(25,75)
+                )
             return x
 
 
@@ -256,6 +264,11 @@ class GenerativeDatamodule(pl.LightningDataModule):
             self.test_images_filenames = duplicate_filenames(
                     test_images_filenames,
                     self.min_dataset_length)
+            
+            np.random.shuffle(self.train_images_filenames)
+            np.random.shuffle(self.val_images_filenames)
+            np.random.shuffle(self.test_images_filenames)
+            
         else:
             self.train_images_filenames = train_images_filenames
             self.val_images_filenames = val_images_filenames
@@ -268,16 +281,6 @@ class GenerativeDatamodule(pl.LightningDataModule):
     
     def setup(self, stage:str=None) -> None:
         if stage == 'fit' or stage is None:
-            self.train_dataset = GenerativeDataset(
-                self.train_images_filenames,
-                imsize=self.imsize,
-                transform=self.transform,
-                polygons=self.polygoned,
-                distortion=self.distortion,
-                colorized_scar=self.colorized_scar,
-                patch_localization=self.patch_localization,
-                patch_size=self.patch_size)
-            
             self.val_dataset = GenerativeDataset(
                 self.val_images_filenames,
                 imsize=self.imsize,
@@ -301,10 +304,20 @@ class GenerativeDatamodule(pl.LightningDataModule):
 
 
     def train_dataloader(self):
+        self.train_dataset = GenerativeDataset(
+                self.train_images_filenames,
+                imsize=self.imsize,
+                transform=self.transform,
+                polygons=self.polygoned,
+                distortion=self.distortion,
+                colorized_scar=self.colorized_scar,
+                patch_localization=self.patch_localization,
+                patch_size=self.patch_size)
         return DataLoader(
             self.train_dataset, 
             batch_size=self.batch_size, 
             shuffle=True,
+            drop_last=True,
             num_workers=CONST.DEFAULT_NUM_WORKERS())
 
 
@@ -313,6 +326,7 @@ class GenerativeDatamodule(pl.LightningDataModule):
             self.val_dataset, 
             batch_size=self.batch_size, 
             shuffle=False,
+            drop_last=True,
             num_workers=CONST.DEFAULT_NUM_WORKERS())
     
     

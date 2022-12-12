@@ -3,7 +3,7 @@ from PIL import Image, ImageFilter, ImageOps, ImageDraw
 import numpy as np
 from .functional import normalize_in_interval
 from scipy.spatial import ConvexHull
-
+from skimage.transform import swirl
 
 
 class Deformer:
@@ -91,6 +91,28 @@ def generate_patch_new(
     else:
         cropped_patch = image.crop((patch_left, patch_top, patch_right, patch_bottom))
     return cropped_patch, mask, (paste_left, paste_top)
+
+
+def generate_swirl_centered(
+        image:Image,
+        factor:float=2.25,
+        swirl_strength:tuple=(2,5),
+        swirl_radius:tuple=(50,100)):
+    container = Container(image.size, scaling_factor=factor)
+    image = np.array(image)
+    warped = swirl(
+        image, 
+        center=(
+            random.randint(container.left,container.right),
+            random.randint(container.top,container.bottom)),
+        rotation=0, 
+        strength=random.randint(
+            swirl_strength[0],
+            swirl_strength[1]), 
+        radius=random.randint(
+            swirl_radius[0],
+            swirl_radius[1]))
+    return Image.fromarray(warped, 'RGB')
 
 
 def generate_scar_centered(
