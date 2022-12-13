@@ -2,7 +2,7 @@ from sklearn.metrics import roc_curve, auc
 from torch import Tensor
 from sklearn.manifold import TSNE
 from PIL import Image
-from self_supervised.support.functional import imagetensor2array
+from self_supervised.support.functional import imagetensor2array, normalize
 import matplotlib.pyplot as plt
 import cv2
 import seaborn as sns
@@ -76,17 +76,21 @@ def plot_tsne(embeddings:Tensor, labels:Tensor, saving_path:str=None, title:str=
     tsne_results = tsne.fit_transform(embeddings.detach().numpy())
     tx = tsne_results[:, 0]
     ty = tsne_results[:, 1]
-
     df = pd.DataFrame()
+    l = labels.tolist()
+    l = ['good' if str(x)=='0' else x for x in l]
+    l = ['cutpaste' if str(x)=='1' else x for x in l]
+    l = ['scar' if str(x)=='2' else x for x in l]
+    labels = ['mvtec' if str(x)=='3' else x for x in l]
     df["labels"] = labels
-    df["comp-1"] = tx
-    df["comp-2"] = ty
+    df["comp-1"] = normalize(tx)
+    df["comp-2"] = normalize(ty)
     plt.figure()
 
-    sns.scatterplot(hue=df.labels.tolist(),
+    sns.scatterplot(hue='labels',
                     x='comp-1',
                     y='comp-2',
-                    palette=sns.color_palette("hls", 4),
+                    palette=dict(good='#00B121', cutpaste='#69140E', scar='#A44200', mvtec='#7BB2D9'),
                     data=df).set(title=title)
     if saving_path:
         plt.savefig(saving_path+name)

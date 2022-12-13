@@ -27,7 +27,6 @@ class SSLModel(nn.Module):
         self.projection_head = self.setup_projection_head(dims)
         self.classifier = nn.Linear(dims[-1], self.num_classes)
         
-        self.dropout = nn.Dropout(0.25)
         self.localization = False
         
     
@@ -36,6 +35,7 @@ class SSLModel(nn.Module):
         for d in dims[:-1]:
             layer = nn.Linear(d,d, bias=False)
             proj_layers.append(layer),
+            #proj_layers.append(nn.Dropout(0.10)),
             proj_layers.append((nn.BatchNorm1d(d))),
             proj_layers.append(nn.ReLU(inplace=True))
         embeds = nn.Linear(dims[-2], dims[-1], bias=self.num_classes > 0)
@@ -105,7 +105,8 @@ class SSLModel(nn.Module):
         x = x.float()
         features = self.feature_extractor(x)
         features = torch.flatten(features, 1)
-        embeddings = self.dropout(self.projection_head(features))
+        #embeddings = self.dropout(self.projection_head(features))
+        embeddings = self.projection_head(features)
         output = self.classifier(embeddings)
         if self.localization:
             return output

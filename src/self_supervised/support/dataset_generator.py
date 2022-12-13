@@ -4,7 +4,7 @@ import numpy as np
 from .functional import normalize_in_interval
 from scipy.spatial import ConvexHull
 from skimage.transform import swirl
-
+from .cutpaste_parameters import CPP
 
 class Deformer:
     def __init__(self, imsize:tuple, points:tuple) -> None:
@@ -98,21 +98,30 @@ def generate_swirl_centered(
         factor:float=2.25,
         swirl_strength:tuple=(2,5),
         swirl_radius:tuple=(50,100)):
+    
     container = Container(image.size, scaling_factor=factor)
-    image = np.array(image)
+    img_arr = np.array(image)
+    r = random.randint(swirl_radius[0], swirl_radius[1])
+    x = random.randint(container.left,container.right)
+    y = random.randint(container.top,container.bottom)
     warped = swirl(
-        image, 
-        center=(
-            random.randint(container.left,container.right),
-            random.randint(container.top,container.bottom)),
+        img_arr, 
+        center=(x,y),
         rotation=0, 
         strength=random.randint(
             swirl_strength[0],
             swirl_strength[1]), 
-        radius=random.randint(
-            swirl_radius[0],
-            swirl_radius[1]))
-    return Image.fromarray(warped, 'RGB')
+        radius=r)
+    warped = np.array(warped*255, dtype=np.uint8)
+    warped = Image.fromarray(warped, image.mode)
+    left = x-int(r/2)
+    right = x+int(r/2)
+    top = y-int(r/2)
+    bottom = y+int(r/2)
+    #cropped = warped.crop((left,top,right,bottom))
+    #cropped = CPP.jitter_transforms(cropped)
+    #warped.paste(cropped, (left,top))
+    return warped
 
 
 def generate_scar_centered(

@@ -255,124 +255,24 @@ def find_white_background(img, threshold=0.8):
         return False
 
 
-def test_centering():
+def test_swirl():
     patch_localization = False
     
     imsize=(256,256)
-    img = Image.open('dataset/screw/train/good/000.png').resize(imsize).convert('RGB')
-    
-    if patch_localization:
-        cropper = Container(imsize, 1.5)
-        img = img.crop((cropper.left, cropper.top, cropper.right, cropper.bottom))
-        img = transforms.RandomCrop((64,64))(img)
-        y, mask, coords = generate_patch_new(img, polygoned=True, distortion=False, factor=1)
-        y = apply_jittering(y, CPP.jitter_transforms)
-        x = paste_patch(img, y, coords, mask)
-        
-        container = Container((64,64), 1)
-        draw = ImageDraw.Draw(x)
-        draw.rectangle(
-            ((container.center-1, container.center-1), (container.center+1, container.center+1)),
-            fill='green')
-        
-        draw.text(
-            (container.left, container.top), 
-            text=str(container.left)+', '+str(container.top),
-            fill='black')
-        draw.text(
-            (container.right, container.bottom), 
-            text=str(container.right)+', '+str(container.bottom),
-            fill='black')
-        draw.rectangle(
-            ((container.left+1, container.top+1), (container.right-1, container.bottom-1)),
-            outline='red')
+    img = Image.open('dataset/zipper/train/good/000.png').resize(imsize).convert('RGB')
+    scar, coords = generate_scar_centered(
+        img,
+        augs=CPP.jitter_transforms
+    )
+    deformed = generate_swirl_centered(
+        scar,
+        factor=1,
+        swirl_strength=(2,4),
+        swirl_radius=(24,48)
+    )
+    img.paste(deformed, coords, deformed)
+    plt.imshow(img)
+    plt.savefig('bho.png', bbox_inches='tight')
 
-        plt.imshow(x)
-        plt.savefig('patch.png', bbox_inches='tight')
-        plt.close()
-        
-        factor = 1
-        y, coords = generate_scar_centered(img,augs=CPP.jitter_transforms, with_padding=False, colorized=True, factor=factor)
-        #y = apply_jittering(y, CPP.jitter_transforms)
-        x = paste_patch(img, y, coords, y)
-        
-        
-        container = Container((64,64), 1)
-        draw = ImageDraw.Draw(x)
-        draw.rectangle(
-            ((container.center-1, container.center-1), (container.center+1, container.center+1)),
-            fill='green')
-        
-        draw.text(
-            (container.left, container.top), 
-            text=str(container.left)+', '+str(container.top),
-            fill='black')
-        draw.text(
-            (container.right, container.bottom), 
-            text=str(container.right)+', '+str(container.bottom),
-            fill='black')
-        draw.rectangle(
-            ((container.left, container.top), (container.right-1, container.bottom-1)),
-            outline='red')
-        
-        plt.imshow(x)
-        plt.savefig('scar.png', bbox_inches='tight')
-    else:
-        factor = 1.5
-        y, mask, coords = generate_patch_new(img, polygoned=True, distortion=False, factor=factor)
-        y = apply_jittering(y, CPP.jitter_transforms)
-        x = paste_patch(img, y, coords, mask)
-        
-        
-        container = Container(imsize, factor)
-        print(container.left, container.top, container.right, container.bottom)
-        draw = ImageDraw.Draw(x)
-        draw.rectangle(
-            ((container.center-1, container.center-1), (container.center+1, container.center+1)),
-            fill='green')
-        
-        draw.text(
-            (container.left, container.top), 
-            text=str(container.left)+', '+str(container.top),
-            fill='black')
-        draw.text(
-            (container.right, container.bottom), 
-            text=str(container.right)+', '+str(container.bottom),
-            fill='black')
-        
-        draw.rectangle(
-            ((container.left+1, container.top+1), (container.right-1, container.bottom-1)),
-            outline='red')
-
-        plt.imshow(x)
-        plt.savefig('patch.png', bbox_inches='tight')
-        plt.close()
-        
-        factor = 2.25
-        y, coords = generate_scar_centered(img,augs=CPP.jitter_transforms, with_padding=False, colorized=False, factor=factor)
-        #y = apply_jittering(y, CPP.jitter_transforms)
-        x = paste_patch(img, y, coords, y)
-        
-        
-        container = Container(imsize, factor)
-        draw = ImageDraw.Draw(x)
-        draw.rectangle(
-            ((container.center-1, container.center-1), (container.center+1, container.center+1)),
-            fill='green')
-        
-        draw.text(
-            (container.left, container.top), 
-            text=str(container.left)+', '+str(container.top),
-            fill='black')
-        draw.text(
-            (container.right, container.bottom), 
-            text=str(container.right)+', '+str(container.bottom),
-            fill='black')
-        draw.rectangle(
-            ((container.left, container.top), (container.right, container.bottom)),
-            outline='red')
-        
-        plt.imshow(x)
-        plt.savefig('scar.png', bbox_inches='tight')
-
-test_centering()
+#test_swirl()
+print(str(3)=='3')

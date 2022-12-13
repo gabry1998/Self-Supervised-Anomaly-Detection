@@ -19,6 +19,9 @@ def get_trainer(stopping_threshold, epochs, reload_dataloaders_every_n_epochs):
     )
     trainer = pl.Trainer(
         callbacks= [cb, early_stopping],
+        precision=16,
+        benchmark=True,
+        deterministic=True,
         accelerator='auto', 
         devices=1, 
         max_epochs=epochs,
@@ -147,7 +150,7 @@ if __name__ == "__main__":
 
     experiments = get_all_subject_experiments('dataset/')
     run(
-        experiments_list=['toothbrush', 'transistor', 'zipper'],
+        experiments_list=experiments,
         dataset_dir='dataset/', 
         root_outputs_dir='brutta_copia/computations/',
         imsize=(256,256),

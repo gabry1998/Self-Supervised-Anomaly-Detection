@@ -18,9 +18,11 @@ class Tracker:
 
 def do_inference(model, x):
     if torch.cuda.is_available():
-        y_hat, embeddings = model(x.to('cuda'))
+        with torch.no_grad():
+            y_hat, embeddings = model(x.to('cuda'))
     else:
-        y_hat, embeddings = model(x.to('cpu'))
+        with torch.no_grad():
+            y_hat, embeddings = model(x.to('cpu'))
     y_hat = y_hat.to('cpu')
     embeddings = embeddings.to('cpu')
     y_hat = get_prediction_class(y_hat)
@@ -113,8 +115,10 @@ def inference_pipeline(
     y_hat_gde = multiclass2binary(y_hat_gde)
     embeddings_mvtec = embeddings_mvtec.to('cpu').detach()
     train_embeddings_gde = train_embeddings_gde.to('cpu').detach()
+    
     test_embeddings_gde = torch.nn.functional.normalize(embeddings_mvtec, p=2, dim=1)
     train_embeddings_gde = torch.nn.functional.normalize(train_embeddings_gde, p=2, dim=1)
+    embeddings_artificial = torch.nn.functional.normalize(embeddings_artificial, p=2, dim=1)
     
     gde = GDE()
     gde.fit(train_embeddings_gde)
@@ -170,7 +174,7 @@ def inference_pipeline(
         y_artificial = y_artificial.tolist() 
         total_y = y_artificial + y_mvtec
         total_y = torch.tensor(np.array(total_y))
-        total_embeddings = torch.cat([embeddings_artificial, embeddings_mvtec])
+        total_embeddings = torch.cat([embeddings_artificial, test_embeddings_gde])
         vis.plot_tsne(
             total_embeddings, 
             total_y, 
@@ -279,16 +283,14 @@ if __name__ == "__main__":
         dataset_dir='dataset/',
         root_inputs_dir='brutta_copia/computations/',
         root_outputs_dir='brutta_copia/computations/',
-        num_experiments_for_each_subject=5,
+        num_experiments_for_each_subject=3,
         seed_list=[
-            187372311,
             204110176,
             129995678,
-            123456789,
-            22612812],
+            123456789],
         polygoned=True,
         distortion=False,
         colorized_scar=False,
         patch_localization=False,
-        batch_size=64,
+        batch_size=128,
         imsize=(256,256))

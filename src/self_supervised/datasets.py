@@ -186,23 +186,22 @@ class GenerativeDataset(Dataset):
             return x
         if y == 2:
             #x = generate_rotation(x)
-            if scar_type=='normal':
-                patch, coords = generate_scar_centered(
-                    x,
-                    self.scar_width,
-                    self.scar_thiccness,
-                    CPP.jitter_transforms,
-                    with_padding=True,
-                    colorized=self.colorized_scar,
-                    factor=scar_factor
-                )
-                x = paste_patch(x, patch, coords, patch)
-            if scar_type=='swirl':
-                x = generate_swirl_centered(
-                    x,
-                    factor=scar_factor,
-                    swirl_radius=(25,75)
-                )
+            patch, coords = generate_scar_centered(
+                x,
+                self.scar_width,
+                self.scar_thiccness,
+                CPP.jitter_transforms,
+                with_padding=False,
+                colorized=self.colorized_scar,
+                factor=scar_factor
+            )
+            patch = generate_swirl_centered(
+                patch,
+                factor=1,
+                swirl_strength=(2,4),
+                swirl_radius=(32,48)
+            )
+            x = paste_patch(x, patch, coords, patch) 
             return x
 
 
