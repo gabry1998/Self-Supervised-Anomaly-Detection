@@ -23,7 +23,7 @@ def do_patch(img):
         container_scaling_factor=1.75)
     mask = None
     mask = polygonize(patch, 3,9)
-    out = paste_patch(img, patch, coords, mask, center=center, debug=True)
+    out = paste_patch(img, patch, coords, mask)
     end = time.time() - start
     print('patch created in', end, 'sec')
     return out
@@ -49,7 +49,7 @@ def do_scar(img):
         scar.size, 
         current_coords=coords,
         container_scaling_factor=2.5)
-    out = paste_patch(img, scar, coords, mask, center=center, debug=True)
+    out = paste_patch(img, scar, coords, mask)
     end = time.time() - start
     print('scar created in', end, 'sec')
     return out
@@ -88,16 +88,22 @@ def do_mask(image):
 
 def do_swirl(img):
     start = time.time()
-    coords, _ = get_coordinates_by_container(img.size, (0,0), 2.5)
-    scar = generate_swirl(
+    segmentation = obj_mask(img)
+    coords = get_random_coordinate(segmentation)
+    coords, center = get_coordinates_by_container(
+        img.size, 
+        (0,0), 
+        current_coords=coords,
+        container_scaling_factor=2.5)
+    img = generate_swirl(
             img,
             coords,
-            swirl_strength=(2,5),
-            swirl_radius=(50,100)
+            swirl_strength=(3,5),
+            swirl_radius=(75,100)
         )
     end = time.time() - start
     print('swirl created in', end, 'sec')
-    return scar
+    return img
 
 
 def save_fig(my_array, name):
@@ -118,18 +124,22 @@ def test_augmentations():
     masks = []
     patches = []
     scars = []
+    swirls = []
     for i in range(10):
         img = Image.open(subjects[i]).resize(imsize).convert('RGB')
         patch = do_patch(img)
         scar = do_scar(img)
         mask = do_mask(img)
+        swirl_im = do_swirl(img)
+        swirls.append(swirl_im)
         patches.append(np.array(patch))
         scars.append(np.array(scar))
         masks.append(mask)
     
-    save_fig(patches, 'patch.png')
-    save_fig(scars, 'scar.png')
-    save_fig(masks, 'mask.png')
+    save_fig(patches, 'brutta_copia/patch.png')
+    save_fig(scars, 'brutta_copia/scar.png')
+    save_fig(swirls, 'brutta_copia/swirl.png')
+    #save_fig(masks, 'brutta_copia/mask.png')
      
 
 def check_all_subject():

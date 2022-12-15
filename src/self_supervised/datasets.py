@@ -89,7 +89,7 @@ class MVTecDatamodule(pl.LightningDataModule):
         return DataLoader(
             self.train_dataset, 
             batch_size=self.batch_size, 
-            shuffle=True,
+            shuffle=False,
             num_workers=4)
     
     
@@ -97,7 +97,14 @@ class MVTecDatamodule(pl.LightningDataModule):
         return DataLoader(
             self.test_dataset, 
             batch_size=self.batch_size, 
-            shuffle=True,
+            shuffle=False,
+            num_workers=4)
+    
+    def predict_dataloader(self):
+        return DataLoader(
+            self.test_dataset, 
+            batch_size=self.batch_size, 
+            shuffle=False,
             num_workers=4)
  
 
@@ -162,24 +169,38 @@ class GenerativeDataset(Dataset):
             x = paste_patch(x, patch, coords, mask)
             pass
         elif y == 2:
-            scar = generate_scar(
-                x,
-                colorized=True,
-                with_padding=True,
-                augs=CPP.jitter_transforms
-            )
-            #mask = polygonize(scar, 3, 9)
-            mask = scar.copy()
-            angle = random.randint(-45,45)
-            mask = mask.rotate(angle)
-            scar = scar.rotate(angle)
-            coords, _ = get_coordinates_by_container(
-                x.size, 
-                scar.size, 
-                current_coords=coords,
-                container_scaling_factor=2.5
-            )
-            x = paste_patch(x, scar, coords, mask)
+            mode = 'swirl'
+            if mode == 'scar':
+                scar = generate_scar(
+                    x,
+                    colorized=True,
+                    with_padding=True,
+                    augs=CPP.jitter_transforms
+                )
+                #mask = polygonize(scar, 3, 9)
+                mask = scar.copy()
+                angle = random.randint(-45,45)
+                mask = mask.rotate(angle)
+                scar = scar.rotate(angle)
+                coords, _ = get_coordinates_by_container(
+                    x.size, 
+                    scar.size, 
+                    current_coords=coords,
+                    container_scaling_factor=2.5
+                )
+                x = paste_patch(x, scar, coords, mask)
+            elif mode == 'swirl':
+                coords, center = get_coordinates_by_container(
+                    x.size, 
+                    (0,0), 
+                    current_coords=coords,
+                    container_scaling_factor=2.5)
+                x = generate_swirl(
+                        x,
+                        coords,
+                        swirl_strength=(3,5),
+                        swirl_radius=(75,100)
+                    )
         
         if self.transform:
             x = self.transform(x)
@@ -312,6 +333,13 @@ class GenerativeDatamodule(pl.LightningDataModule):
     
     
     def test_dataloader(self):
+        return DataLoader(
+            self.test_dataset, 
+            batch_size=self.batch_size, 
+            shuffle=False,
+            num_workers=CONST.DEFAULT_NUM_WORKERS())
+        
+    def predict_dataloader(self):
         return DataLoader(
             self.test_dataset, 
             batch_size=self.batch_size, 

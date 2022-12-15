@@ -101,19 +101,21 @@ Gradcam example (Image Level Localization)
 #### Explanation
 In the example we have an almost perfect scenario in BOTTLES, and the real defect (purple) are in the same region as artificial defects. In GRID we can see a more sparse distribution, caused by the homogeneous patterns in images and small defects hard to localize, still, we can see real defect overlapped on scars and polygon patches
 ### Experiments results
-Experiments run with 5 different seed and batch size of 64
+Experiments run with 3 different seed and batch size of 128
 |     | AUC | F1-SCORE | AUPRO |
 | :--:     | :--:   | :--: | :--: |
-average    |  0.87  |	0.77 |	0.46 
-bottle     |	1	|   0.98 |  0.7 
-cable      |  0.8	|   0.76 |	0.52 
-capsule    |  0.74  |	0.44 |	0.26 
-grid	   |  0.91  |	0.89 |	0.5 
-metal nut  |  0.96  |	0.87 |	0.44 
-screw      |  0.65  |	0.43 |	0.22 
-tile       |  0.97  |	0.85 |	0.53 
-toothbrush |  0.85  |	0.81 |	0.4 
-zipper     |  0.97  |	0.91 |  0.56
+average    |  0.89 |	0.75 |	0.41
+bottle     | 1 |	0.98 |	0.62
+cable      |  0.82 |	0.7 |	0.43
+capsule    |  0.83 |	0.61 |	0.32
+grid	   | 0.9 |	0.79 |	0.55
+metal nut  | 0.97 |	0.91 |	0.44
+pill |	0.85 |	0.52 |	0.29
+screw      | 0.73 |	0.32 |	0.19
+tile       | 0.97 |	0.93 |	0.46
+toothbrush |  0.88 |	0.73 |	0.29
+transistor |	0.9 |	0.8 |	0.42
+zipper     | 0.98 |	0.96 |	0.48
 ### Other Examples
 
 <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/cable/image_level/gradcam/heatmap_and_masks_0.png"/>

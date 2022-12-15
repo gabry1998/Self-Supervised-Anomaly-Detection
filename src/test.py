@@ -264,7 +264,7 @@ def test_swirl():
         img,
         augs=CPP.jitter_transforms
     )
-    deformed = generate_swirl_centered(
+    deformed = generate_swirl(
         scar,
         factor=1,
         swirl_strength=(2,4),

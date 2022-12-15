@@ -14,6 +14,8 @@ from torch import Tensor
 from numpy import dot
 from numpy.linalg import norm
 
+from self_supervised.support.functional import get_prediction_class, gt2label
+
 
 class SSLModel(nn.Module):
     def __init__(self, 
@@ -128,7 +130,7 @@ class SSLM(pl.LightningModule):
         
         self.model = SSLModel(self.num_classes, dims)
         self.localization = False
-            
+        self.mvtec = False
             
     def unfreeze_layers(self, p=True):
         self.model.unfreeze_layers(p)
@@ -195,9 +197,19 @@ class SSLM(pl.LightningModule):
 
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        outputs = {}
         x, y = batch
-        y_hat, _ = self.model(x)
-        return y_hat
+        y_hat,  embeds = self.model(x)
+        y_hat = get_prediction_class(y_hat)
+        outputs['y_hat'] = y_hat
+        outputs['embedding'] = embeds
+        if self.mvtec:
+            outputs['y_true'] = torch.tensor(gt2label(y, 0, 1))
+            outputs['y_true_tsne'] = torch.tensor(gt2label(y, 0, 3))
+            outputs['groundtruth'] = y
+        else:
+            outputs['y_true'] = y
+        return outputs
 
 
     def configure_optimizers(self):

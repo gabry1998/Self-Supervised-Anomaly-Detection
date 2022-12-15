@@ -84,6 +84,12 @@ def inference_pipeline(
     )
     mvtec.setup()
     
+    tester = pl.Trainer(
+        precision=16,
+        #benchmark=True,
+        #deterministic=True,
+        accelerator='auto', 
+        devices=1)
     print('>>> Inferencing...')
     x_artificial, y_artificial = next(iter(artificial.test_dataloader())) 
     start = time.time()
@@ -267,7 +273,7 @@ def run(
         np.mean(aupro_scores))
     
     report = mtr.metrics_to_dataframe(metric_dict, np.array(experiments_list))
-    mtr.export_dataframe(report, saving_path=root_outputs_dir, name='polygon_patch_rect_scar_color.csv')
+    mtr.export_dataframe(report, saving_path=root_outputs_dir, name='polygon_patch_swirl.csv')
     
     
 if __name__ == "__main__":

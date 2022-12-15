@@ -20,13 +20,11 @@ def get_trainer(stopping_threshold, epochs, reload_dataloaders_every_n_epochs):
     trainer = pl.Trainer(
         callbacks= [cb, early_stopping],
         precision=16,
-        #benchmark=True,
-        #deterministic=True,
+        benchmark=True,
         accelerator='auto', 
         devices=1, 
         max_epochs=epochs,
         check_val_every_n_epoch=1)
-        #reload_dataloaders_every_n_epochs=reload_dataloaders_every_n_epochs)
     return trainer, cb
 
 
