@@ -260,7 +260,7 @@ def test_swirl():
     
     imsize=(256,256)
     img = Image.open('dataset/zipper/train/good/000.png').resize(imsize).convert('RGB')
-    scar, coords = generate_scar_centered(
+    scar, coords = generate_scar(
         img,
         augs=CPP.jitter_transforms
     )

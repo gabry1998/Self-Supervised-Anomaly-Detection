@@ -23,8 +23,6 @@ def localize_single_image(
         ):
     image = Image.open(filename).resize(imsize).convert('RGB')
     input_tensor = transforms.ToTensor()(image)
-    input_tensor_norm = transforms.Normalize(
-            (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(input_tensor)
     
     sslm = md.SSLM.load_from_checkpoint(
     model_dir)
@@ -34,14 +32,14 @@ def localize_single_image(
     gradcam = GradCam(
         md.SSLM.load_from_checkpoint(model_dir).model)
     
-    y_hat, embedding = sslm(input_tensor_norm[None, :])
+    y_hat, embedding = sslm(input_tensor[None, :])
     predicted_class = get_prediction_class(y_hat)
     if predicted_class == 0:
         saliency_map = torch.zeros((256,256))[None, None, :]
     else:
         if predicted_class > 1:
             predicted_class = 1
-        saliency_map = gradcam(input_tensor_norm[None, :], predicted_class)
+        saliency_map = gradcam(input_tensor[None, :], predicted_class)
     heatmap = localize(input_tensor[None, :], saliency_map)
     image_array = imagetensor2array(input_tensor)
     plot_heatmap(image_array, heatmap, saving_path=output_dir, name=output_name)
@@ -69,17 +67,15 @@ def image_level_localization(
     
     for i in tqdm(range(num_images), desc='localizing defects'):
         input_image_tensor, gt = datamodule.test_dataset[random.randint(0, j)]
-        input_tensor_norm = transforms.Normalize(
-            (0.485, 0.456, 0.406), (0.229, 0.224, 0.225))(input_image_tensor)
         
-        prediction_raw, _ = sslm(input_tensor_norm[None, :])
+        prediction_raw, _ = sslm(input_image_tensor[None, :])
         predicted_class = get_prediction_class(prediction_raw)
         if predicted_class == 0:
             saliency_map = torch.zeros((256,256))[None, None, :]
         else:
             #if predicted_class > 1:
             #    predicted_class = 1
-            saliency_map = gradcam(input_tensor_norm[None, :], predicted_class)
+            saliency_map = gradcam(input_image_tensor[None, :], predicted_class)
         heatmap = localize(input_image_tensor[None, :], saliency_map)
         image = imagetensor2array(input_image_tensor)
         gt_mask = imagetensor2array(gt)
@@ -263,7 +259,7 @@ def single_im():
 if __name__ == "__main__":
     experiments=get_all_subject_experiments('dataset/')
     run(
-        experiments_list=['bottle', 'cable', 'capsule', 'screw'],
+        experiments_list=experiments,
         dataset_dir='dataset/',
         root_inputs_dir='brutta_copia/computations/',
         root_outputs_dir='brutta_copia/computations/',

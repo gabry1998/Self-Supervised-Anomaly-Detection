@@ -9,8 +9,6 @@ from .support import constants as CONST
 from .support.dataset_generator import *
 from .support.cutpaste_parameters import CPP
 from .support.functional import *
-from numpy import array
-from numpy.random import permutation
 
 # dataset per le vere immagini mvtec
 class MVTecDataset(Dataset):
@@ -18,7 +16,7 @@ class MVTecDataset(Dataset):
             self,
             dataset_dir:str,
             subject:str,
-            images_filenames:array,
+            images_filenames,
             imsize:tuple=CONST.DEFAULT_IMSIZE(),
             transform:Compose=None
             ) -> None:
@@ -65,12 +63,8 @@ class MVTecDatamodule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.seed = seed
         self.localization = localization
-        
-        if localization:
-            self.transform = transforms.Compose([
-                transforms.ToTensor()])
-        else:
-            self.transform = CONST.DEFAULT_TRANSFORMS()
+
+        self.transform = transforms.ToTensor()
         
         self.train_images_filenames = get_image_filenames(self.root_dir+'/train/good/')
         self.test_images_filenames = get_mvtec_test_images(self.root_dir+'/test/')
@@ -111,10 +105,9 @@ class MVTecDatamodule(pl.LightningDataModule):
 class GenerativeDataset(Dataset):
     def __init__(
             self,
-            images_filenames:array,
+            images_filenames,
             imsize=CONST.DEFAULT_IMSIZE(),
             transform=None,
-            distortion=False,
             polygons=False,
             colorized_scar=False,
             patch_localization=False,
@@ -129,13 +122,12 @@ class GenerativeDataset(Dataset):
         
         self.imsize = imsize
         self.transform = transform
-        self.distortion = distortion
         self.colorized_scar = colorized_scar
         self.patch_localization = patch_localization
         self.patch_size = patch_size
         self.polygoned = polygons
         
-        self.labels = self.generate_labels()
+        #self.labels = self.generate_labels()
 
  
     def generate_labels(self):
@@ -144,11 +136,50 @@ class GenerativeDataset(Dataset):
 
 
     def __getitem__(self, index):
-        x = self.images_filenames[index]
-        y = self.labels[index]
-        #y = random.randint(0, 2)
+        x = Image.open(
+            self.images_filenames[index]).resize(
+                self.imsize).convert('RGB')
+        y = random.randint(0, 2)
         
-        x = self.generate_cutpaste_3way(x, y)
+        if self.patch_localization:
+            cropper = Container(x.size, 1.5)
+            x = x.crop((cropper.left, cropper.top, cropper.right, cropper.bottom))
+            x = transforms.RandomCrop(self.patch_size)(x)
+            if is_only_background(x):
+                y = 0
+        segmentation = obj_mask(x)
+        coords = get_random_coordinate(segmentation)
+        if y == 1:
+            patch = generate_patch(x, augs=CPP.jitter_transforms)
+            coords, _ = get_coordinates_by_container(
+                x.size, 
+                patch.size, 
+                current_coords=coords,
+                container_scaling_factor=1.75
+            )
+            mask = None
+            mask = polygonize(patch, 3,9)
+            x = paste_patch(x, patch, coords, mask)
+            pass
+        elif y == 2:
+            scar = generate_scar(
+                x,
+                colorized=True,
+                with_padding=True,
+                augs=CPP.jitter_transforms
+            )
+            #mask = polygonize(scar, 3, 9)
+            mask = scar.copy()
+            angle = random.randint(-45,45)
+            mask = mask.rotate(angle)
+            scar = scar.rotate(angle)
+            coords, _ = get_coordinates_by_container(
+                x.size, 
+                scar.size, 
+                current_coords=coords,
+                container_scaling_factor=2.5
+            )
+            x = paste_patch(x, scar, coords, mask)
         
         if self.transform:
             x = self.transform(x)
@@ -157,52 +188,6 @@ class GenerativeDataset(Dataset):
     
     def __len__(self):
         return self.images_filenames.shape[0]
-    
-    
-    def generate_cutpaste_3way(self, x, y):
-        patch_factor = 2
-        scar_factor = 2.5
-        scar_type = 'swirl'
-        x = Image.open(x).resize(self.imsize).convert('RGB')
-        if self.patch_localization:
-            cropper = Container(x.size, 1.5)
-            x = x.crop((cropper.left, cropper.top, cropper.right, cropper.bottom))
-            x = transforms.RandomCrop(self.patch_size)(x)
-            patch_factor = 1
-            scar_factor = 1
-        if y == 0:
-            return x
-        if y == 1:
-            #x = generate_rotation(x)
-            patch, mask, coords = generate_patch_new(
-                image=x, 
-                area_ratio=self.area_ratio, 
-                aspect_ratio=self.aspect_ratio, 
-                polygoned=self.polygoned, 
-                distortion=self.distortion,
-                factor=patch_factor)
-            patch = apply_jittering(patch, CPP.jitter_transforms)
-            x = paste_patch(x, patch, coords, mask)
-            return x
-        if y == 2:
-            #x = generate_rotation(x)
-            patch, coords = generate_scar_centered(
-                x,
-                self.scar_width,
-                self.scar_thiccness,
-                CPP.jitter_transforms,
-                with_padding=False,
-                colorized=self.colorized_scar,
-                factor=scar_factor
-            )
-            patch = generate_swirl_centered(
-                patch,
-                factor=1,
-                swirl_strength=(2,4),
-                swirl_radius=(32,48)
-            )
-            x = paste_patch(x, patch, coords, patch) 
-            return x
 
 
 class GenerativeDatamodule(pl.LightningDataModule):
@@ -216,7 +201,6 @@ class GenerativeDatamodule(pl.LightningDataModule):
             min_dataset_length:int=1000,
             duplication=False,
             polygoned=False,
-            distortion=False,
             colorized_scar=False,
             patch_localization=False,
             patch_size:tuple=CONST.DEFAULT_PATCH_SIZE()):
@@ -233,12 +217,12 @@ class GenerativeDatamodule(pl.LightningDataModule):
         self.min_dataset_length = min_dataset_length
         self.duplication = duplication
         self.polygoned = polygoned
-        self.distortion = distortion
         self.colorized_scar=colorized_scar
         self.patch_localization = patch_localization
         self.patch_size = patch_size
 
-        self.transform = CONST.DEFAULT_TRANSFORMS()
+        #self.transform = CONST.DEFAULT_TRANSFORMS()
+        self.transform = transforms.ToTensor()
         
         self.prepare_filenames()
 
@@ -280,12 +264,20 @@ class GenerativeDatamodule(pl.LightningDataModule):
     
     def setup(self, stage:str=None) -> None:
         if stage == 'fit' or stage is None:
+            self.train_dataset = GenerativeDataset(
+                self.train_images_filenames,
+                imsize=self.imsize,
+                transform=self.transform,
+                polygons=self.polygoned,
+                colorized_scar=self.colorized_scar,
+                patch_localization=self.patch_localization,
+                patch_size=self.patch_size)
+            
             self.val_dataset = GenerativeDataset(
                 self.val_images_filenames,
                 imsize=self.imsize,
                 transform=self.transform,
                 polygons=self.polygoned,
-                distortion=self.distortion,
                 colorized_scar=self.colorized_scar,
                 patch_localization=self.patch_localization,
                 patch_size=self.patch_size)
@@ -296,22 +288,12 @@ class GenerativeDatamodule(pl.LightningDataModule):
                 imsize=self.imsize,
                 transform=self.transform,
                 polygons=self.polygoned,
-                distortion=self.distortion,
                 colorized_scar=self.colorized_scar,
                 patch_localization=self.patch_localization,
                 patch_size=self.patch_size)
 
 
     def train_dataloader(self):
-        self.train_dataset = GenerativeDataset(
-                self.train_images_filenames,
-                imsize=self.imsize,
-                transform=self.transform,
-                polygons=self.polygoned,
-                distortion=self.distortion,
-                colorized_scar=self.colorized_scar,
-                patch_localization=self.patch_localization,
-                patch_size=self.patch_size)
         return DataLoader(
             self.train_dataset, 
             batch_size=self.batch_size, 

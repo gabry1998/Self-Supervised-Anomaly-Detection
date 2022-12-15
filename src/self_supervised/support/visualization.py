@@ -30,6 +30,7 @@ def plot_history(network_history, saving_path=None, mode='training'):
         plt.savefig(saving_path+mode+'_loss.png')
     else:
         plt.savefig(mode+'_loss.png')
+    plt.close()
 
     plt.figure()
     plt.xlabel('Epochs')

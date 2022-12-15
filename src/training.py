@@ -20,13 +20,13 @@ def get_trainer(stopping_threshold, epochs, reload_dataloaders_every_n_epochs):
     trainer = pl.Trainer(
         callbacks= [cb, early_stopping],
         precision=16,
-        benchmark=True,
-        deterministic=True,
+        #benchmark=True,
+        #deterministic=True,
         accelerator='auto', 
         devices=1, 
         max_epochs=epochs,
-        check_val_every_n_epoch=1,
-        reload_dataloaders_every_n_epochs=reload_dataloaders_every_n_epochs)
+        check_val_every_n_epoch=1)
+        #reload_dataloaders_every_n_epochs=reload_dataloaders_every_n_epochs)
     return trainer, cb
 
 
@@ -36,7 +36,6 @@ def training_pipeline(
         subject:str,
         imsize:tuple=CONST.DEFAULT_IMSIZE(),
         polygoned=False,
-        distortion=False,
         colorized_scar=False,
         patch_localization:bool=False,
         batch_size:int=CONST.DEFAULT_BATCH_SIZE(),
@@ -60,7 +59,6 @@ def training_pipeline(
     print('result dir:', result_path)
     print('checkpoint name:', checkpoint_name)
     print('polygoned:', polygoned)
-    print('distortion:', distortion)
     print('colorized scar:', colorized_scar)
     print('patch localization:', patch_localization)
     
@@ -77,7 +75,6 @@ def training_pipeline(
         duplication=True,
         patch_localization=patch_localization,
         polygoned=polygoned,
-        distortion=distortion,
         colorized_scar=colorized_scar
     )
     
@@ -110,7 +107,6 @@ def run(
         root_outputs_dir:str,
         imsize:tuple=CONST.DEFAULT_IMSIZE(),
         polygoned=True,
-        distortion=False,
         colorized_scar=False,
         patch_localization:bool=False,
         batch_size:int=CONST.DEFAULT_BATCH_SIZE(),
@@ -133,7 +129,6 @@ def run(
             subject=subject,
             imsize=imsize,
             polygoned=polygoned,
-            distortion=distortion,
             colorized_scar=colorized_scar,
             patch_localization=patch_localization,
             batch_size=batch_size,
@@ -155,8 +150,7 @@ if __name__ == "__main__":
         root_outputs_dir='brutta_copia/computations/',
         imsize=(256,256),
         polygoned=True,
-        distortion=False,
-        colorized_scar=False,
+        colorized_scar=True,
         patch_localization=False,
         batch_size=96,
         train_val_split=0.2,

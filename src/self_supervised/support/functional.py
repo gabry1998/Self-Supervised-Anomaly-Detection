@@ -84,7 +84,9 @@ def np2tensor(images, labels)-> tuple:
     return images,labels
 
 
-def imagetensor2array(image_tensor:Tensor):
+def imagetensor2array(image_tensor:Tensor, integer=True):
+    if integer:
+        return np.array(torch.permute(image_tensor, (1,2,0))*255).astype(np.uint8)
     return np.array(torch.permute(image_tensor, (1,2,0)))
 
 

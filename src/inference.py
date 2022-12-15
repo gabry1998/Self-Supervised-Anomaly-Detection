@@ -36,7 +36,6 @@ def inference_pipeline(
         root_outputs_dir:str,
         subject:str,
         polygoned:bool=False,
-        distortion:bool=False,
         colorized_scar:bool=False,
         patch_localization=False,
         seed:int=CONST.DEFAULT_SEED(),
@@ -52,7 +51,6 @@ def inference_pipeline(
     outputs_dir = root_outputs_dir+subject+'/image_level/'
     print('outputs directory:', outputs_dir)
     print('polygoned patches:', polygoned)
-    print('distorted patches:', distortion)
     print('patch localization:', patch_localization)
     
     print('')
@@ -72,7 +70,6 @@ def inference_pipeline(
         min_dataset_length=500,
         patch_localization=patch_localization,
         polygoned=polygoned,
-        distortion=distortion,
         colorized_scar=colorized_scar,
     )
     artificial.setup('test')
@@ -204,7 +201,6 @@ def run(
         num_experiments_for_each_subject:int=1,
         seed_list:list=[0],
         polygoned:bool=False,
-        distortion:bool=False,
         colorized_scar=False,
         patch_localization=False,
         batch_size:int=128,
@@ -240,7 +236,6 @@ def run(
                 root_outputs_dir=root_outputs_dir,
                 subject=subject,
                 polygoned=polygoned,
-                distortion=distortion,
                 colorized_scar=colorized_scar,
                 patch_localization=patch_localization,
                 seed=seed,
@@ -272,7 +267,7 @@ def run(
         np.mean(aupro_scores))
     
     report = mtr.metrics_to_dataframe(metric_dict, np.array(experiments_list))
-    mtr.export_dataframe(report, saving_path=root_outputs_dir, name='s.csv')
+    mtr.export_dataframe(report, saving_path=root_outputs_dir, name='polygon_patch_rect_scar_color.csv')
     
     
 if __name__ == "__main__":
@@ -289,7 +284,6 @@ if __name__ == "__main__":
             129995678,
             123456789],
         polygoned=True,
-        distortion=False,
         colorized_scar=False,
         patch_localization=False,
         batch_size=128,
