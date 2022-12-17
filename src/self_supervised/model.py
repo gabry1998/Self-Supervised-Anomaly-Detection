@@ -1,6 +1,7 @@
 from math import sqrt
 from sklearn.covariance import LedoitWolf
 from sklearn.neighbors import KernelDensity
+from scipy.stats import gaussian_kde
 from torch import nn
 import torch
 from torchvision import models
@@ -119,7 +120,7 @@ class SSLM(pl.LightningModule):
     def __init__(
             self,
             num_epochs:int=None,
-            lr:float=CONST.DEFAULT_LEARNING_RATE(),
+            lr:float=0.03,
             dims=CONST.DEFAULT_PROJECTION_HEAD_DIMS()):
         
         super(SSLM, self).__init__()
@@ -201,6 +202,7 @@ class SSLM(pl.LightningModule):
         x, y = batch
         y_hat,  embeds = self.model(x)
         y_hat = get_prediction_class(y_hat)
+        outputs['original'] = x
         outputs['y_hat'] = y_hat
         outputs['embedding'] = embeds
         if self.mvtec:
@@ -262,7 +264,7 @@ class GDE():
         pass
         
     def fit(self, embeddings:Tensor):
-            self.kde = KernelDensity().fit(embeddings)
+        self.kde = KernelDensity().fit(embeddings)
         
         
     def predict(self, embeddings:Tensor):

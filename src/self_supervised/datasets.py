@@ -18,7 +18,7 @@ class MVTecDataset(Dataset):
             subject:str,
             images_filenames,
             imsize:tuple=CONST.DEFAULT_IMSIZE(),
-            transform:Compose=None
+            transform:Compose=None,
             ) -> None:
         
         super().__init__()
@@ -148,13 +148,14 @@ class GenerativeDataset(Dataset):
                 self.imsize).convert('RGB')
         y = random.randint(0, 2)
         
+        container_scaling_factor_patch = 1.75
+        container_scaling_factor_scar = 2.5
+        
         if self.patch_localization:
-            cropper = Container(x.size, 1.5)
-            x = x.crop((cropper.left, cropper.top, cropper.right, cropper.bottom))
             x = transforms.RandomCrop(self.patch_size)(x)
-            if is_only_background(x):
-                y = 0
-        segmentation = obj_mask(x)
+            container_scaling_factor_patch= 1
+            container_scaling_factor_scar = 1
+        segmentation = obj_mask(x, self.patch_localization)
         coords = get_random_coordinate(segmentation)
         if y == 1:
             patch = generate_patch(x, augs=CPP.jitter_transforms)
@@ -162,45 +163,28 @@ class GenerativeDataset(Dataset):
                 x.size, 
                 patch.size, 
                 current_coords=coords,
-                container_scaling_factor=1.75
+                container_scaling_factor=container_scaling_factor_patch
             )
             mask = None
-            mask = polygonize(patch, 3,9)
+            mask = polygonize(patch, 3,15)
             x = paste_patch(x, patch, coords, mask)
             pass
         elif y == 2:
-            mode = 'swirl'
-            if mode == 'scar':
-                scar = generate_scar(
-                    x,
-                    colorized=True,
-                    with_padding=True,
-                    augs=CPP.jitter_transforms
-                )
-                #mask = polygonize(scar, 3, 9)
-                mask = scar.copy()
-                angle = random.randint(-45,45)
-                mask = mask.rotate(angle)
-                scar = scar.rotate(angle)
-                coords, _ = get_coordinates_by_container(
-                    x.size, 
-                    scar.size, 
-                    current_coords=coords,
-                    container_scaling_factor=2.5
-                )
-                x = paste_patch(x, scar, coords, mask)
-            elif mode == 'swirl':
-                coords, center = get_coordinates_by_container(
-                    x.size, 
-                    (0,0), 
-                    current_coords=coords,
-                    container_scaling_factor=2.5)
-                x = generate_swirl(
-                        x,
-                        coords,
-                        swirl_strength=(3,5),
-                        swirl_radius=(75,100)
-                    )
+            scar = generate_scar(
+                x,
+                colorized=True,
+                with_padding=True,
+                augs=CPP.jitter_transforms
+            )
+            angle = random.randint(-45,45)
+            scar = scar.rotate(angle)
+            coords, _ = get_coordinates_by_container(
+                x.size, 
+                scar.size, 
+                current_coords=coords,
+                container_scaling_factor=container_scaling_factor_scar
+            )
+            x = paste_patch(x, scar, coords, scar)
         
         if self.transform:
             x = self.transform(x)

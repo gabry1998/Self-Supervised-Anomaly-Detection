@@ -1,5 +1,5 @@
 import random
-from PIL import Image,ImageDraw
+from PIL import Image,ImageDraw, ImageFilter
 import numpy as np
 from .functional import normalize_in_interval
 from scipy.spatial import ConvexHull
@@ -23,19 +23,20 @@ class Container:
         self.height = self.bottom - self.top
 
 
-def is_only_background(image):
-    return np.sum(obj_mask(image)) == 0
-
-
-def obj_mask(image):
+def obj_mask(image, patch_localization:bool=False):
+    if patch_localization:
+        image = image.filter(ImageFilter.SHARPEN)
     gray = np.array(image.convert('L'))
-    edged_image = feature.canny(gray, sigma=1.5, low_threshold=5, high_threshold=15)
-    structure = square(3)
-    edged_image = binary_dilation(edged_image, structure).astype(int)
-    edged_image = binary_closing(edged_image, structure)
-    edged_image = ndimage.binary_fill_holes(edged_image, structure).astype(int)
-    structure = square(4)
-    edged_image = binary_erosion(edged_image, structure).astype(int)
+    if patch_localization:
+        edged_image = feature.canny(gray,sigma=1.5, high_threshold=30)
+    else:
+        edged_image = feature.canny(gray, sigma=1.5, low_threshold=5, high_threshold=15)
+        structure = square(3)
+        edged_image = binary_dilation(edged_image, structure).astype(int)
+        edged_image = binary_closing(edged_image, structure)
+        edged_image = ndimage.binary_fill_holes(edged_image, structure).astype(int)
+        structure = square(4)
+        edged_image = binary_erosion(edged_image, structure).astype(int)
     edged_image = (edged_image*255).astype(np.uint8)
     labels = label(edged_image)
     edged_image = labels == np.argmax(np.bincount(labels.flat, weights=edged_image.flat))
@@ -64,14 +65,8 @@ def get_coordinates_by_container(
     container = Container(imsize, scaling_factor=container_scaling_factor)
     # coordinate
     if current_coords is None:
-        if (container.right-patch_w) > container.left:
-            center_x = random.randint(container.left, container.right-patch_w)
-        else:
-            center_x = container.left
-        if (container.bottom-patch_h) > container.top:
-            center_y = random.randint(container.top, container.bottom-patch_h)
-        else:
-            center_y = container.top
+        center_x = random.randint(container.left, container.right)
+        center_y = random.randint(container.top, container.bottom)
     else:
         center_x = current_coords[0]
         center_y = current_coords[1]
@@ -79,11 +74,23 @@ def get_coordinates_by_container(
     paste_left = center_x - int(patchsize[0]/2)
     paste_top = center_y - int(patchsize[1]/2)
     
-    if paste_left < container.left or paste_left > container.right:
-        center_x = int(imsize[0]/2)
+    if paste_left < container.left:
+        center_x = container.left
         paste_left = center_x - int(patchsize[0]/2)
-    if paste_top < container.top or paste_top > container.bottom:
-        center_y = int(imsize[1]/2)
+        if paste_left < 0:
+            paste_left = 0
+            center_x = int(patch_w/2)
+    if paste_left > container.right:
+        center_x = container.right
+        paste_left = center_x - int(patchsize[0]/2)
+    if paste_top < container.top: 
+        center_y = container.top
+        paste_top = center_y - int(patchsize[1]/2)
+        if paste_top < 0:
+            paste_top = 0
+            center_y = int(patch_h/2)
+    if paste_top > container.bottom:
+        center_y = container.bottom
         paste_top = center_y - int(patchsize[1]/2)
     return (paste_left, paste_top), (center_x, center_y)
    
@@ -195,7 +202,8 @@ def paste_patch(image, patch, coords, mask=None, center:tuple=None, debug:bool=F
     aug_image = image.copy()
     aug_image.paste(patch, (coords[0], coords[1]), mask=mask)
     if debug:
-        aug_image.paste(Image.new('RGB', (3,3), 'red'), (coords[0], coords[1]), None)
+        aug_image.paste(Image.new('RGB', (2,2), 'red'), (coords[0], coords[1]), None)
+        aug_image.paste(Image.new('RGB', (2,2), 'green'), (center[0], center[1]), None)
     return aug_image
 
 

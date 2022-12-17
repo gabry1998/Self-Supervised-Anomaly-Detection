@@ -2,6 +2,8 @@ from self_supervised.gradcam import GradCam
 from self_supervised.model import GDE, SSLM
 from self_supervised.datasets import *
 from tqdm import tqdm
+from mvtec_ad_evaluation import roc_curve_util as rc
+from mvtec_ad_evaluation.generic_util import trapezoid
 import self_supervised.datasets as dt
 import self_supervised.support.constants as CONST
 import self_supervised.support.visualization as vis
@@ -13,7 +15,7 @@ import numpy as np
 dataset_dir='dataset/'
 root_inputs_dir='outputs/computations/'
 root_outputs_dir='brutta_copia/computations/'
-subject='transistor'
+subject='bottle'
 np.random.seed(204110176)
 random.seed(204110176)
 model_dir = root_inputs_dir+subject+'/image_level/'+'best_model.ckpt'
@@ -109,3 +111,44 @@ vis.plot_tsne(
     total_y, 
     saving_path=outputs_dir, 
     title='Embeddings projection for '+subject.upper()+' ['+str(204110176)+']')
+
+print('>>> compute PRO')
+gradcam = GradCam(
+    SSLM.load_from_checkpoint(model_dir).model)
+
+test_y_hat = predictions_mvtec['y_hat']
+x_mvtec = predictions_mvtec['original']
+gt_mvtec = predictions_mvtec['groundtruth']
+
+print(test_y_hat.shape)
+print(x_mvtec.shape)
+print(gt_mvtec.shape)
+
+ground_truth_maps = []
+anomaly_maps = []
+for i in range(len(test_y_hat)):
+    predicted_class = test_y_hat[i]
+    if predicted_class == 0:
+        saliency_map = torch.zeros((256,256))[None, :]
+    else:
+        if predicted_class > 1:
+            predicted_class = 1
+        x = x_mvtec[i]
+        saliency_map = gradcam(x[None, :], test_y_hat[i])
+    anomaly_maps.append(np.array(saliency_map.squeeze()))
+anomaly_maps = np.array(anomaly_maps)
+ground_truth_maps = np.array(gt_mvtec.squeeze())
+all_fprs, all_pros = mtr.compute_pro(
+anomaly_maps=anomaly_maps,
+ground_truth_maps=ground_truth_maps)
+au_pro = mtr.compute_aupro(all_fprs, all_pros, 0.3)
+
+print('>>> plot PRO..')
+vis.plot_curve(
+    all_fprs,
+    all_pros,
+    au_pro,
+    saving_path=root_outputs_dir+subject+'/image_level/',
+    title='Pro curve for '+subject.upper()+' ['+str(204110176)+']',
+    name='pro.png'
+)

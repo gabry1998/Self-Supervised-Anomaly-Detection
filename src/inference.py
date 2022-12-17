@@ -14,6 +14,7 @@ class Tracker:
     def __init__(self) -> None:
         self.auc = -1
         self.aupro = -1
+        self.auc_pixel = -1
 
 
 def do_inference(model, x):
@@ -130,7 +131,7 @@ def inference_pipeline(
     end = time.time() - start
     print('Done in '+str(end)+ 'sec')
     
-    print('>>> calculating ROC, AUC, F1..')
+    print('>>> calculating (IMAGE LEVEL) ROC, AUC, F1..')
     start = time.time()
     mvtec_test_scores = normalize(mvtec_test_scores)
     fpr, tpr, _ = mtr.compute_roc(mvtec_test_labels, mvtec_test_scores)
@@ -155,10 +156,12 @@ def inference_pipeline(
             x = x_mvtec[i]
             saliency_map = gradcam(x[None, :], test_y_hat[i])
         anomaly_maps.append(np.array(saliency_map.squeeze()))
-    anomaly_maps = np.array(anomaly_maps)
-    ground_truth_maps = np.array(gt_mvtec.squeeze())
+    anomaly_maps_np = np.array(anomaly_maps)
+    gt_mvtec = gt_mvtec.squeeze()
+    ground_truth_maps = np.array(gt_mvtec)
+    
     all_fprs, all_pros = mtr.compute_pro(
-    anomaly_maps=anomaly_maps,
+    anomaly_maps=anomaly_maps_np,
     ground_truth_maps=ground_truth_maps)
 
     au_pro = mtr.compute_aupro(all_fprs, all_pros, 0.3)
@@ -195,8 +198,28 @@ def inference_pipeline(
             title='Pro curve for '+subject.upper()+' ['+str(seed)+']',
             name='pro.png'
         )
+    
+    print('>>> calculating (PIXEL LEVEL) ROC, AUC, F1..')
+    start = time.time()
+    flat_anomaly_maps = torch.nan_to_num(torch.tensor(anomaly_maps).flatten(0, -1))
+    flat_gt_labels = gt_mvtec.flatten(0, -1)
+    fpr, tpr, _ = mtr.compute_roc(flat_gt_labels, flat_anomaly_maps)
+    pixel_auc_score = mtr.compute_auc(fpr, tpr)
+    pixel_f_score = mtr.compute_f1(flat_gt_labels, torch.tensor(heatmap2mask(flat_anomaly_maps)))
+    end = time.time() - start
+    print('Done in '+str(end)+ 'sec')
+    
+    if (pixel_auc_score > tracker.auc_pixel):
+        print('>>> plot (PIXEL) ROC..')
+        tracker.auc = auc_score
+        vis.plot_curve(
+            fpr, tpr, 
+            pixel_auc_score, 
+            saving_path=outputs_dir,
+            title='Roc curve for '+subject.upper()+' ['+str(seed)+']',
+            name='pixel_roc.png')
         
-    return auc_score, f_score, au_pro, tracker
+    return auc_score, f_score, au_pro, pixel_auc_score, pixel_f_score, tracker
 
 
 def run(
@@ -221,14 +244,16 @@ def run(
     auc_scores = []
     f1_scores= []
     aupro_scores = []
+    pixel_auc_scores = []
+    pixel_f1_scores = []
     
     for i in pbar:
         subject = experiments_list[i]
         temp_auc = []
         temp_f1 = []
         temp_aupro = []
-        auc_score = -1
-        aupro_score = -1
+        temp_pixel_auc = []
+        temp_pixel_f1 = []
         metric_tracker = Tracker()
         for j in range(num_experiments_for_each_subject):
             seed = seed_list[j]
@@ -236,7 +261,7 @@ def run(
             print('')
             print('Running experiment '+str(j+1)+'/'+str(num_experiments_for_each_subject))
             print('Experiment seed:', str(seed))
-            auc_score, f_score, aupro_score, metric_tracker = inference_pipeline(
+            auc_score, f_score, aupro_score, pixel_auc_score, pixel_f_score, metric_tracker = inference_pipeline(
                 dataset_dir=dataset_dir,
                 root_inputs_dir=root_inputs_dir,
                 root_outputs_dir=root_outputs_dir,
@@ -251,6 +276,8 @@ def run(
             temp_auc.append(auc_score)
             temp_f1.append(f_score)
             temp_aupro.append(aupro_score)
+            temp_pixel_auc.append(pixel_auc_score)
+            temp_pixel_f1.append(pixel_f_score)
             os.system('clear')
         
         temp_auc = np.array(temp_auc)
@@ -259,16 +286,24 @@ def run(
         auc_scores.append(np.mean(temp_auc))
         f1_scores.append(np.mean(temp_f1))
         aupro_scores.append(np.mean(temp_aupro))
+        pixel_auc_scores.append(np.mean(temp_pixel_auc))
+        pixel_f1_scores.append(np.mean(temp_pixel_f1))
         
         
     experiments_list.append('average')
-    metric_dict['AUC (image level)'] = np.append(
+    metric_dict['AUC (image)'] = np.append(
         auc_scores, 
         np.mean(auc_scores))
-    metric_dict['F1 (image level)'] = np.append(
+    metric_dict['F1 (image)'] = np.append(
         f1_scores, 
         np.mean(f1_scores))
-    metric_dict['AUPRO (image level)'] = np.append(
+    metric_dict['AUC (pixel)'] = np.append(
+        pixel_auc_scores, 
+        np.mean(pixel_auc_scores))
+    metric_dict['F1 (pixel)'] = np.append(
+        pixel_f1_scores, 
+        np.mean(pixel_f1_scores))
+    metric_dict['AUPRO'] = np.append(
         aupro_scores, 
         np.mean(aupro_scores))
     
@@ -282,7 +317,7 @@ if __name__ == "__main__":
     run(
         experiments_list=experiments,
         dataset_dir='dataset/',
-        root_inputs_dir='brutta_copia/computations/',
+        root_inputs_dir='outputs/computations/',
         root_outputs_dir='brutta_copia/computations/',
         num_experiments_for_each_subject=3,
         seed_list=[
