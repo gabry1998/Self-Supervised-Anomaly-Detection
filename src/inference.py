@@ -1,5 +1,5 @@
 from self_supervised.gradcam import GradCam
-from self_supervised.model import GDE, SSLM
+from self_supervised.model import GDE, SSLM, PeraNet
 from self_supervised.datasets import *
 from tqdm import tqdm
 import self_supervised.datasets as dt
@@ -56,11 +56,10 @@ def inference_pipeline(
     
     print('')
     print('>>> Loading model')
-    sslm = SSLM(dims=[512,512,512,512,512,512,512,512,512])
-    sslm = SSLM.load_from_checkpoint(model_dir, model=sslm.model)
-    sslm.eval()
-    if torch.cuda.is_available():
-        sslm.to('cuda')
+    peranet:PeraNet = PeraNet.load_from_checkpoint(model_dir)
+    peranet.freeze_net()
+    peranet.eval()
+    tester = pl.Trainer(accelerator='auto', devices=1)
     print('>>> Generating test dataset (artificial)')
     artificial = GenerativeDatamodule(
         dataset_dir+subject+'/',
@@ -84,66 +83,40 @@ def inference_pipeline(
                 seed=seed
     )
     mvtec.setup()
-    
-    tester = pl.Trainer(
-        precision=16,
-        #benchmark=True,
-        #deterministic=True,
-        accelerator='auto', 
-        devices=1)
     print('>>> Inferencing...')
-    x_artificial, y_artificial = next(iter(artificial.test_dataloader())) 
-    start = time.time()
-    y_hat_artificial, embeddings_artificial = do_inference(
-        sslm, 
-        x_artificial)
-    end = time.time() - start
-    print('Done in '+str(end)+ 'sec')
+    predictions_artificial = tester.predict(peranet, artificial)[0]
     
-    #print('>>> Printing report')
-    #df = mtr.report(y=y_artificial, y_hat=y_hat_artificial)
-    #mtr.export_dataframe(df, saving_path=outputs_dir)
-
     print('>>> Inferencing over real mvtec images...')
-    x_mvtec, gt_mvtec = next(iter(mvtec.test_dataloader()))  
-    y_mvtec = gt2label(gt_mvtec, negative=0, positive=3)
-    start = time.time()
-    y_hat_mvtec, embeddings_mvtec = do_inference(sslm, x_mvtec)
-    end = time.time() - start
-    print('Done in '+str(end)+ 'sec')
-    
+    peranet.enable_mvtec_inference()
+    predictions_mvtec = tester.predict(peranet, mvtec)[0]
+
     print('>>> Embeddings for GDE..')
-    start = time.time()
-    x_train_mvtec, _ = next(iter(mvtec.train_dataloader())) 
-    y_hat_gde, train_embeddings_gde = do_inference(sslm, x_train_mvtec)
-    y_hat_gde = multiclass2binary(y_hat_gde)
-    embeddings_mvtec = embeddings_mvtec.to('cpu').detach()
-    train_embeddings_gde = train_embeddings_gde.to('cpu').detach()
+    predictions_mvtec_gde_train = tester.predict(peranet, mvtec.train_dataloader())[0]
     
-    test_embeddings_gde = torch.nn.functional.normalize(embeddings_mvtec, p=2, dim=1)
+    print('>>> normalization...')
+    embeddings_mvtec = predictions_mvtec['embedding']
+    train_embeddings_gde = predictions_mvtec_gde_train['embedding']
+    embeddings_artificial = predictions_artificial['embedding']
+    embeddings_mvtec = torch.nn.functional.normalize(embeddings_mvtec, p=2, dim=1)
     train_embeddings_gde = torch.nn.functional.normalize(train_embeddings_gde, p=2, dim=1)
     embeddings_artificial = torch.nn.functional.normalize(embeddings_artificial, p=2, dim=1)
     
+    print('>>> GDE')
     gde = GDE()
     gde.fit(train_embeddings_gde)
-    mvtec_test_scores = gde.predict(test_embeddings_gde)
-    mvtec_test_labels = gt2label(gt_mvtec)
-    end = time.time() - start
-    print('Done in '+str(end)+ 'sec')
-    
+    mvtec_test_scores = gde.predict(embeddings_mvtec)
+    mvtec_test_labels = predictions_mvtec['y_true']
+
     print('>>> calculating (IMAGE LEVEL) ROC, AUC, F1..')
-    start = time.time()
     mvtec_test_scores = normalize(mvtec_test_scores)
     fpr, tpr, _ = mtr.compute_roc(mvtec_test_labels, mvtec_test_scores)
     auc_score = mtr.compute_auc(fpr, tpr)
-    test_y_hat = multiclass2binary(y_hat_mvtec)
+    test_y_hat = multiclass2binary(predictions_mvtec['y_hat'])
     f_score = mtr.compute_f1(torch.tensor(mvtec_test_labels), test_y_hat)
-    end = time.time() - start
-    print('Done in '+str(end)+ 'sec')
     
     print('>>> compute PRO')
-    gradcam = GradCam(
-        SSLM.load_from_checkpoint(model_dir).model)
+    x_mvtec = predictions_mvtec['x_prime']
+    gradcam = GradCam(PeraNet.load_from_checkpoint(model_dir))
     ground_truth_maps = []
     anomaly_maps = []
     for i in range(len(test_y_hat)):
@@ -157,7 +130,7 @@ def inference_pipeline(
             saliency_map = gradcam(x[None, :], test_y_hat[i])
         anomaly_maps.append(np.array(saliency_map.squeeze()))
     anomaly_maps_np = np.array(anomaly_maps)
-    gt_mvtec = gt_mvtec.squeeze()
+    gt_mvtec = predictions_mvtec['groundtruth'].squeeze()
     ground_truth_maps = np.array(gt_mvtec)
     
     all_fprs, all_pros = mtr.compute_pro(
@@ -177,10 +150,8 @@ def inference_pipeline(
             name='roc.png')
         
         print('>>> Generating tsne visualization')
-        y_artificial = y_artificial.tolist() 
-        total_y = y_artificial + y_mvtec
-        total_y = torch.tensor(np.array(total_y))
-        total_embeddings = torch.cat([embeddings_artificial, test_embeddings_gde])
+        total_y = torch.cat([predictions_artificial['y_tsne'], predictions_mvtec['y_tsne']])
+        total_embeddings = torch.cat([predictions_artificial['embedding'], predictions_mvtec['embedding']])
         vis.plot_tsne(
             total_embeddings, 
             total_y, 
@@ -220,7 +191,6 @@ def inference_pipeline(
             name='pixel_roc.png')
         
     return auc_score, f_score, au_pro, pixel_auc_score, pixel_f_score, tracker
-
 
 def run(
         experiments_list:list,
@@ -315,9 +285,9 @@ if __name__ == "__main__":
     
     experiments = get_all_subject_experiments('dataset/')
     run(
-        experiments_list=experiments,
+        experiments_list=['bottle','carpet','hazelnut','leather','wood'],
         dataset_dir='dataset/',
-        root_inputs_dir='outputs/computations/',
+        root_inputs_dir='brutta_copia/computations/',
         root_outputs_dir='brutta_copia/computations/',
         num_experiments_for_each_subject=3,
         seed_list=[

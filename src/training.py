@@ -1,5 +1,5 @@
 from self_supervised.datasets import *
-from self_supervised.model import SSLM, MetricTracker
+from self_supervised.model import SSLM, PeraNet, MetricTracker
 from self_supervised.support.visualization import plot_history
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, ModelPruning
 from tqdm import tqdm
@@ -9,7 +9,7 @@ import numpy as np
 import random
 
 
-def get_trainer(stopping_threshold:float, epochs:int, dir_path_checkpoint:str):
+def get_trainer(stopping_threshold:float, epochs:int, min_epochs:int):
     cb = MetricTracker()
     early_stopping = EarlyStopping(
         monitor="val_accuracy",
@@ -17,19 +17,13 @@ def get_trainer(stopping_threshold:float, epochs:int, dir_path_checkpoint:str):
         mode='max',
         patience=5
     )
-    mc = ModelCheckpoint(
-        dirpath=dir_path_checkpoint,
-        monitor='val_accuracy',
-        save_top_k=1,
-        every_n_epochs=5,
-        mode='max'
-    )
     trainer = pl.Trainer(
         callbacks= [cb, early_stopping],
         precision=16,
         benchmark=True,
         accelerator='auto', 
         devices=1, 
+        min_epochs=min_epochs,
         max_epochs=epochs,
         check_val_every_n_epoch=1)
     return trainer, cb
@@ -84,21 +78,30 @@ def training_pipeline(
     )
     
     print('>>> setting up the model')
-    pretext_model = SSLM(
-        num_epochs=projection_training_epochs, 
-        lr=projection_training_lr,
-        dims=[512,512,512,512,512,512,512,512,512])
-    trainer, cb = get_trainer(0.96, projection_training_epochs, result_path+'model_logs/')
+    #pretext_model = SSLM(
+    #    num_epochs=projection_training_epochs, 
+    #    lr=projection_training_lr,
+    #    )
+    pretext_model = PeraNet(
+        latent_space_dims=[512,512,512,512,512,512,512,512,512],
+        num_classes=2, lr=0.03, num_epochs=30)
+    pretext_model.freeze_net(['backbone'])
+    trainer, cb = get_trainer(0.95, projection_training_epochs, min_epochs=10)
     print('>>> start training (training projection head)')
     trainer.fit(pretext_model, datamodule=datamodule)
     print('>>> training plot')
     plot_history(cb.log_metrics, result_path, mode='training')
+    trainer.save_checkpoint(result_path+checkpoint_name)
     
     print('>>> setting up the model (fine tune whole net)')
+    pretext_model:PeraNet = PeraNet.load_from_checkpoint(result_path+checkpoint_name)
+    pretext_model.lr = 0.001
+    pretext_model.num_epochs = 20
+    pretext_model.unfreeze_net()
     pretext_model.lr = fine_tune_lr
     pretext_model.num_epochs = fine_tune_epochs
-    pretext_model.unfreeze_layers(True)
-    trainer, cb = get_trainer(0.96, fine_tune_epochs, result_path+'model_logs/')
+    #pretext_model.unfreeze_layers(True)
+    trainer, cb = get_trainer(0.95, fine_tune_epochs, min_epochs=5)
     print('>>> start training (fine tune whole net)') 
     trainer.fit(pretext_model, datamodule=datamodule)
     trainer.save_checkpoint(result_path+checkpoint_name)
@@ -151,7 +154,7 @@ if __name__ == "__main__":
 
     experiments = get_all_subject_experiments('dataset/')
     run(
-        experiments_list=['bottle', 'carpet','hazelnut','leather','wood'],
+        experiments_list=['carpet'],
         dataset_dir='dataset/', 
         root_outputs_dir='brutta_copia/computations/',
         imsize=(256,256),

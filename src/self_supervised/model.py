@@ -24,9 +24,9 @@ class PeraNet(pl.LightningModule):
             self, 
             latent_space_dims:list=[512,512,512,512,512,512,512,512,512,512,512],
             backbone:str='resnet18',
-            lr:float=0.03,
-            num_epochs:int=30,
-            num_classes:int=3) -> None:
+            lr:float=0.001,
+            num_epochs:int=20,
+            num_classes:int=2) -> None:
         super(PeraNet, self).__init__()
         self.save_hyperparameters()
         self.lr = lr
@@ -132,8 +132,8 @@ class PeraNet(pl.LightningModule):
         return output
     
     
-    def training_step(self, batch, batch_idx):    
-        x, y = batch
+    def training_step(self, batch, batch_idx):
+        x, y, _ = batch
         
         outputs = self(x)
         y_hat = outputs['classifier']
@@ -149,7 +149,7 @@ class PeraNet(pl.LightningModule):
 
     
     def validation_step(self, batch, batch_idx):
-        x, y = batch
+        x, y, _ = batch
         
         outputs = self(x)
         y_hat = outputs['classifier']
@@ -166,7 +166,7 @@ class PeraNet(pl.LightningModule):
 
 
     def test_step(self, batch, batch_idx):
-        x, y = batch
+        x, y, _ = batch
         if self.mvtec:
             y = torch.tensor(gt2label(y))
             if torch.cuda.is_available():
@@ -198,7 +198,7 @@ class PeraNet(pl.LightningModule):
             'groundtruth':None,
             'embedding':None
         }
-        x, groundtruths = batch
+        x_prime, groundtruths, x = batch
         if self.mvtec:
             y = torch.tensor(gt2label(groundtruths))
             y_tsne = torch.tensor(gt2label(groundtruths, negative=0, positive=self.num_classes))
@@ -216,10 +216,11 @@ class PeraNet(pl.LightningModule):
             outputs['y_tsne'] = groundtruths 
             outputs['groundtruth'] = None  
             
-        predictions = self(x)
+        predictions = self(x_prime)
         y_hat = get_prediction_class(predictions['classifier'])
         
         outputs['x'] = x
+        outputs['x_prime'] = x_prime
         outputs['embedding'] = predictions['latent_space']
         outputs['y_hat'] = y_hat
         

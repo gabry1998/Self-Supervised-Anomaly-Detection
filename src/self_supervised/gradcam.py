@@ -1,4 +1,4 @@
-from self_supervised.model import SSLModel
+from self_supervised.model import SSLModel, PeraNet
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -7,10 +7,9 @@ import pytorch_lightning as pl
 
 
 class GradCam:
-    def __init__(self, model:SSLModel) -> None:
-        model.eval()
+    def __init__(self, model:PeraNet) -> None:
         self.localizer = model
-        self.localizer.set_for_localization(True)
+        self.localizer.eval()
         self.gradients = dict()
         self.activations = dict()
         
@@ -20,7 +19,7 @@ class GradCam:
         def forward_hook(module, input, output):
             self.activations['value'] = output
             return None
-        target_layer = self.localizer.feature_extractor.layer4
+        target_layer = self.localizer.feature_extractor[7]
         
         target_layer.register_forward_hook(forward_hook)
         target_layer.register_backward_hook(backward_hook)
@@ -28,7 +27,8 @@ class GradCam:
     def compute_gradcam(self, input_tensor:torch.Tensor, class_idx=None):
         x = input_tensor.clone()
         b, c, h, w = x.size()
-        logit = self.localizer(x)
+        out = self.localizer(x)
+        logit = out['classifier']
         self.localizer.zero_grad()
         if class_idx is None:
             score = logit[:, logit.max(1)[-1]].squeeze()

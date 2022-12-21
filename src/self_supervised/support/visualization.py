@@ -69,7 +69,7 @@ def plot_curve(fpr, tpr, area, saving_path:str=None, title:str='', name:str='cur
     plt.close()
 
 
-def plot_tsne(embeddings:Tensor, labels:Tensor, saving_path:str=None, title:str='', name:str='tsne.png'):
+def plot_tsne(embeddings:Tensor, labels:Tensor, saving_path:str=None, title:str='', name:str='tsne.png', num_classes:int=2):
     if saving_path and not os.path.exists(saving_path):
         os.makedirs(saving_path)
         
@@ -81,8 +81,11 @@ def plot_tsne(embeddings:Tensor, labels:Tensor, saving_path:str=None, title:str=
     l = labels.tolist()
     l = ['good' if str(x)=='0' else x for x in l]
     l = ['cutpaste' if str(x)=='1' else x for x in l]
-    l = ['scar' if str(x)=='2' else x for x in l]
-    labels = ['mvtec' if str(x)=='3' else x for x in l]
+    if num_classes == 3:
+        l = ['scar' if str(x)=='2' else x for x in l]
+        labels = ['mvtec' if str(x)=='3' else x for x in l]
+    if num_classes == 2:
+        labels = ['mvtec' if str(x)=='2' else x for x in l]
     df["labels"] = labels
     df["comp-1"] = normalize(tx)
     df["comp-2"] = normalize(ty)

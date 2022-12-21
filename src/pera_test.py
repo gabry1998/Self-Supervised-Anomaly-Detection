@@ -10,24 +10,6 @@ from self_supervised.support.visualization import *
 import self_supervised.metrics as mtr
 
 
-def do_inference(model, x):
-    if torch.cuda.is_available():
-        with torch.no_grad():
-            output = model(x.to('cuda'))
-            y_hat = output['classifier']
-            embeddings = output['latent_space']
-    else:
-        with torch.no_grad():
-            output = model(x.to('cpu'))
-            y_hat = output['classifier']
-            embeddings = output['latent_space']
-    y_hat = y_hat.to('cpu')
-    embeddings = embeddings.to('cpu')
-    y_hat = get_prediction_class(y_hat)
-    
-    return y_hat, embeddings
-
-
 def get_trainer(stopping_threshold:float, epochs:int, min_epochs:int=10):
     cb = MetricTracker()
     early_stopping = EarlyStopping(
@@ -36,14 +18,17 @@ def get_trainer(stopping_threshold:float, epochs:int, min_epochs:int=10):
         mode='max',
         patience=5
     )
+    md = ModelCheckpoint(
+        save_weights_only=True
+    )
     trainer = pl.Trainer(
-        callbacks= [cb, early_stopping],
-        precision=16,
-        benchmark=True,
+        callbacks= [cb, early_stopping, md],
+        #precision=16,
+        #benchmark=True,
         accelerator='auto', 
         devices=1, 
         max_epochs=epochs,
-        min_epochs=min_epochs,
+        #min_epochs=min_epochs,
         check_val_every_n_epoch=1)
     return trainer, cb
 
@@ -61,19 +46,20 @@ def train():
     )
     trainer, cb = get_trainer(0.95, 30)
     random.seed(0)
-    peranet = PeraNet()
+    peranet = PeraNet(num_classes=2, lr=0.03, num_epochs=30)
     peranet.freeze_net(['backbone'])
     trainer.fit(peranet, datamodule=datamodule)
     plot_history(cb.log_metrics, 'qui/', mode='training')
     trainer.save_checkpoint('qui/best_model.ckpt')
     peranet:PeraNet = PeraNet.load_from_checkpoint('qui/best_model.ckpt')
-    peranet.lr = 0.01
+    peranet.lr = 0.001
     peranet.num_epochs = 20
+    print(peranet.lr, peranet.num_epochs)
     peranet.unfreeze_net()
     trainer, cb = get_trainer(0.95, 20, min_epochs=3)
     trainer.fit(peranet, datamodule=datamodule)
     trainer.save_checkpoint('qui/best_model.ckpt')
-    plot_history(cb.log_metrics, 'qui/', mode='training')
+    plot_history(cb.log_metrics, 'qui/', mode='fine_tune')
 
     mvtec = MVTecDatamodule(
         'dataset/bottle/',
@@ -109,8 +95,9 @@ def test():
     mvtec.setup()
     trainer, cb = get_trainer(0.95, 30)
     random.seed(204110176)
-    peranet = PeraNet()
+    peranet = PeraNet.load_from_checkpoint('qui/best_model.ckpt')
     peranet.freeze_net()
+    peranet.eval()
     print('>>> Inferencing...')
     predictions_artificial = trainer.predict(peranet, datamodule)[0]
 
@@ -120,10 +107,14 @@ def test():
 
     print('>>> Embeddings for GDE..')
     predictions_mvtec_gde_train = trainer.predict(peranet, mvtec.train_dataloader())[0]
-    print(predictions_mvtec['embedding'])
+    
     embeddings_mvtec = predictions_mvtec['embedding']
     train_embeddings_gde = predictions_mvtec_gde_train['embedding']
     embeddings_artificial = predictions_artificial['embedding']
+    embeddings_mvtec = torch.nn.functional.normalize(embeddings_mvtec, p=2, dim=1)
+    train_embeddings_gde = torch.nn.functional.normalize(train_embeddings_gde, p=2, dim=1)
+    embeddings_artificial = torch.nn.functional.normalize(embeddings_artificial, p=2, dim=1)
+    
     gde = GDE()
     gde.fit(train_embeddings_gde)
     mvtec_test_scores = gde.predict(embeddings_mvtec)
@@ -143,13 +134,19 @@ def test():
         title='Roc curve for '+'bottle'.upper()+' ['+str(204110176)+']',
         name='roc.png')
     
+    print(predictions_artificial['y_tsne'].shape)
+    print(predictions_artificial['embedding'].shape)
+    print(predictions_mvtec['y_tsne'].shape)
+    print(predictions_mvtec['embedding'].shape)
     total_y = torch.cat([predictions_artificial['y_tsne'], predictions_mvtec['y_tsne']])
     total_embeddings = torch.cat([predictions_artificial['embedding'], predictions_mvtec['embedding']])
+    print(total_y.shape)
+    print(total_embeddings.shape)
     plot_tsne(
         total_embeddings, 
         total_y, 
         saving_path='qui/', 
         title='Embeddings projection for '+'bottle'.upper()+' ['+str(204110176)+']')
 
-train()   
+#train()   
 test()

@@ -1,6 +1,6 @@
 import numpy as np
 import pytorch_lightning as pl
-from PIL import Image
+from PIL import Image, ImageOps
 from sklearn.model_selection import train_test_split as tts
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
@@ -40,9 +40,9 @@ class MVTecDataset(Dataset):
         gt = ground_truth(gt_filename, self.imsize)
         
         if self.transform:
-            test_image = self.transform(test_image)
+            test_image_prime = self.transform(test_image)
         gt = transforms.ToTensor()(gt)
-        return test_image, gt
+        return test_image_prime, gt, transforms.ToTensor()(test_image)
     
     def __len__(self):
         return self.images_filenames.shape[0]
@@ -141,7 +141,7 @@ class PeraDataset(Dataset):
             patch_localization=False,
             patch_size:tuple=CONST.DEFAULT_PATCH_SIZE()) -> None:
 
-        super().__init__()
+        super(PeraDataset).__init__()
         self.images_filenames = images_filenames
         self.area_ratio = CPP.cutpaste_augmentations['patch']['area_ratio']
         self.aspect_ratio = CPP.cutpaste_augmentations['patch']['aspect_ratio']
@@ -154,12 +154,19 @@ class PeraDataset(Dataset):
         self.patch_size = patch_size
         self.polygoned = polygons
         self.colorized_scar = colorized_scar
+        self.labels = self.generate_labels()
+
+
+    def generate_labels(self):
+        length = self.images_filenames.shape[0]
+        return np.array(np.random.uniform(0,2, length), dtype=int)
 
     def __getitem__(self, index):
         x = Image.open(
             self.images_filenames[index]).resize(
                 self.imsize).convert('RGB')
-        y = random.randint(0, 2)
+        #y = random.randint(0, 2)
+        y = self.labels[index]
         
         
         if y > 0:
@@ -168,7 +175,9 @@ class PeraDataset(Dataset):
             segmentation = obj_mask(x)
             coords = get_random_coordinate(segmentation)
             if y == 1:
-                patch = generate_patch(x, augs=CPP.jitter_transforms)
+                rotations = [90,180,270]
+                temp = x.rotate(random.choice(rotations))
+                patch = generate_patch(temp, augs=CPP.jitter_transforms)
                 coords, _ = check_valid_coordinates_by_container(
                     x.size, 
                     patch.size, 
@@ -178,7 +187,7 @@ class PeraDataset(Dataset):
                 patch = patch.filter(ImageFilter.SHARPEN)
                 mask = rect2poly(patch)
                 x = paste_patch(x, patch, coords, mask)
-            else:
+            if y == 2:
                 scar = generate_scar(
                     x,
                     colorized=True,
@@ -196,13 +205,12 @@ class PeraDataset(Dataset):
                 x = paste_patch(x, scar, coords, scar)        
         
         if self.transform:
-            x = self.transform(x)
-        return x, y
+            x_prime = self.transform(x)
+        return x_prime, y, transforms.ToTensor()(x) 
     
     
     def __len__(self):
         return self.images_filenames.shape[0]
-
 
 
 

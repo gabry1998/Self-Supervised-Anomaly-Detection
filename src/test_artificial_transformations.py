@@ -1,22 +1,26 @@
 from self_supervised.support.dataset_generator import *
 from self_supervised.support.functional import *
+from self_supervised.datasets import GenerativeDatamodule
 from self_supervised.support.cutpaste_parameters import CPP
 from skimage import feature
 from skimage.morphology import square, label
 from scipy import ndimage
 from scipy.ndimage import binary_dilation, binary_erosion, binary_closing
-from PIL import Image
+from PIL import Image, ImageOps
 import matplotlib.pyplot as plt
 import numpy as np
 import time
 import os
 from torchvision import transforms
+import collections
 
 def do_patch(img, segmentation=None):
     start = time.time()
     coords = get_random_coordinate(segmentation)
+    rotations = [90,180,270]
+    temp = img.rotate(random.choice(rotations))
     patch = generate_patch(
-        img, 
+        temp, 
         area_ratio=CPP.cutpaste_augmentations['patch']['area_ratio'],
         aspect_ratio=CPP.cutpaste_augmentations['patch']['aspect_ratio'],
         augs=CPP.jitter_transforms)
@@ -204,9 +208,39 @@ def check_all_subject():
         plot_together(goods, patches, scars, masks, 'outputs/dataset_analysis/', 'artificial_overall.png')
 
     os.system('clear')
+
+
+def check_distribution():
+    artificial = GenerativeDatamodule(
+        'dataset/bottle/',
+        (256,256),
+        256,
+        duplication=True,
+        polygoned=True,
+        colorized_scar=True
+    )
+    artificial.setup('test')
+    labels = artificial.test_dataset.labels
+    c = collections.Counter(labels)
+    instances = [c[x] for x in sorted(c.keys())]
+    keys = sorted(c.keys())
+    font_title = {
+        'weight': 'bold',
+        'size': 22
+    }
+    font = {
+        'size': 22
+    }
+    plt.figure(figsize=(20,20))
+    plt.bar(keys, instances)
     
+    plt.title('Dataset distribution', fontdict=font_title)
+    plt.ylabel('Frequency', fontdict=font)
+    plt.xticks([0,1,2], ['good', 'polygon patch', 'colored scar'], font=font)
+    plt.savefig('distribution.png', bbox_inches='tight')
     
 test_augmentations()
 check_all_subject()
+#check_distribution()
 
 
