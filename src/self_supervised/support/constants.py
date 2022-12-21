@@ -3,25 +3,12 @@ from torchvision import transforms
 
 
 # options
-def DATASET_GENERATION_TYPES():
-    return np.array(['generative_dataset', 'classic_dataset'])
-
-
-def CLASSIFICATION_TASK_TYPES():
-    return np.array(['3-way', 'binary'])
+def LEGAL_MODES():
+    return ['latent_space', 'whole_net', 'evaluation']
 
 
 def DEFAULT_CHECKPOINT_MODEL_NAME():
     return 'best_model.ckpt'
-
-
-# dataset constants
-def DEFAULT_CLASSIFICATION_TASK():
-    return CLASSIFICATION_TASK_TYPES()[0]
-
-
-def DEFAULT_DATASET_GENERATION():
-    return DATASET_GENERATION_TYPES()[0]
 
 
 def DEFAULT_IMSIZE():

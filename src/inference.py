@@ -308,7 +308,7 @@ def run(
         np.mean(aupro_scores))
     
     report = mtr.metrics_to_dataframe(metric_dict, np.array(experiments_list))
-    mtr.export_dataframe(report, saving_path=root_outputs_dir, name='polygon_patch_swirl.csv')
+    mtr.export_dataframe(report, saving_path=root_outputs_dir, name='polygon_patch_colored_scar.csv')
     
     
 if __name__ == "__main__":
@@ -325,7 +325,7 @@ if __name__ == "__main__":
             129995678,
             123456789],
         polygoned=True,
-        colorized_scar=False,
+        colorized_scar=True,
         patch_localization=False,
         batch_size=128,
         imsize=(256,256))

@@ -10,6 +10,8 @@ from .support.dataset_generator import *
 from .support.cutpaste_parameters import CPP
 from .support.functional import *
 
+
+
 # dataset per le vere immagini mvtec
 class MVTecDataset(Dataset):
     def __init__(
@@ -64,17 +66,29 @@ class MVTecDatamodule(pl.LightningDataModule):
         self.seed = seed
         self.localization = localization
 
-        self.transform = transforms.ToTensor()
+        #self.transform = transforms.ToTensor()
+        self.transform = CONST.DEFAULT_TRANSFORMS()
         
         self.train_images_filenames = get_image_filenames(self.root_dir+'/train/good/')
         self.test_images_filenames = get_mvtec_test_images(self.root_dir+'/test/')
     
     
     def setup(self, stage=None) -> None:
+        train_images_filenames, val_images_filenames = tts(
+            self.train_images_filenames, 
+            test_size=0.2, 
+            random_state=self.seed)
+        
         self.train_dataset = MVTecDataset(
             self.root_dir,
             self.subject,
-            self.train_images_filenames,
+            train_images_filenames,
+            transform=self.transform
+        )
+        self.val_dataset = MVTecDataset(
+            self.root_dir,
+            self.subject,
+            val_images_filenames,
             transform=self.transform
         )
         self.test_dataset = MVTecDataset(
@@ -88,6 +102,13 @@ class MVTecDatamodule(pl.LightningDataModule):
     def train_dataloader(self):
         return DataLoader(
             self.train_dataset, 
+            batch_size=self.batch_size, 
+            shuffle=True,
+            num_workers=4)
+    
+    def val_dataloader(self):
+        return DataLoader(
+            self.val_dataset, 
             batch_size=self.batch_size, 
             shuffle=False,
             num_workers=4)
@@ -107,6 +128,83 @@ class MVTecDatamodule(pl.LightningDataModule):
             shuffle=False,
             num_workers=4)
  
+
+# avanti con questo tipo di dataset
+class PeraDataset(Dataset):
+    def __init__(
+            self,
+            images_filenames,
+            imsize=CONST.DEFAULT_IMSIZE(),
+            transform=None,
+            polygons=False,
+            colorized_scar=False,
+            patch_localization=False,
+            patch_size:tuple=CONST.DEFAULT_PATCH_SIZE()) -> None:
+
+        super().__init__()
+        self.images_filenames = images_filenames
+        self.area_ratio = CPP.cutpaste_augmentations['patch']['area_ratio']
+        self.aspect_ratio = CPP.cutpaste_augmentations['patch']['aspect_ratio']
+        self.scar_width = CPP.cutpaste_augmentations['scar']['width']
+        self.scar_thiccness = CPP.cutpaste_augmentations['scar']['thiccness']
+        
+        self.imsize = imsize
+        self.transform = transform
+        self.patch_localization = patch_localization
+        self.patch_size = patch_size
+        self.polygoned = polygons
+        self.colorized_scar = colorized_scar
+
+    def __getitem__(self, index):
+        x = Image.open(
+            self.images_filenames[index]).resize(
+                self.imsize).convert('RGB')
+        y = random.randint(0, 2)
+        
+        
+        if y > 0:
+            container_scaling_factor_patch = 1.75
+            container_scaling_factor_scar = 2.5
+            segmentation = obj_mask(x)
+            coords = get_random_coordinate(segmentation)
+            if y == 1:
+                patch = generate_patch(x, augs=CPP.jitter_transforms)
+                coords, _ = check_valid_coordinates_by_container(
+                    x.size, 
+                    patch.size, 
+                    current_coords=coords,
+                    container_scaling_factor=container_scaling_factor_patch
+                )
+                patch = patch.filter(ImageFilter.SHARPEN)
+                mask = rect2poly(patch)
+                x = paste_patch(x, patch, coords, mask)
+            else:
+                scar = generate_scar(
+                    x,
+                    colorized=True,
+                    with_padding=True,
+                    augs=CPP.jitter_transforms
+                )
+                angle = random.randint(-45,45)
+                scar = scar.rotate(angle)
+                coords, _ = check_valid_coordinates_by_container(
+                        x.size, 
+                        scar.size, 
+                        current_coords=coords,
+                        container_scaling_factor=container_scaling_factor_scar
+                )
+                x = paste_patch(x, scar, coords, scar)        
+        
+        if self.transform:
+            x = self.transform(x)
+        return x, y
+    
+    
+    def __len__(self):
+        return self.images_filenames.shape[0]
+
+
+
 
 # avanti con questo tipo di dataset
 class GenerativeDataset(Dataset):
@@ -159,7 +257,7 @@ class GenerativeDataset(Dataset):
         coords = get_random_coordinate(segmentation)
         if y == 1:
             patch = generate_patch(x, augs=CPP.jitter_transforms)
-            coords, _ = get_coordinates_by_container(
+            coords, _ = check_valid_coordinates_by_container(
                 x.size, 
                 patch.size, 
                 current_coords=coords,
@@ -178,7 +276,7 @@ class GenerativeDataset(Dataset):
             )
             angle = random.randint(-45,45)
             scar = scar.rotate(angle)
-            coords, _ = get_coordinates_by_container(
+            coords, _ = check_valid_coordinates_by_container(
                 x.size, 
                 scar.size, 
                 current_coords=coords,
@@ -226,8 +324,8 @@ class GenerativeDatamodule(pl.LightningDataModule):
         self.patch_localization = patch_localization
         self.patch_size = patch_size
 
-        #self.transform = CONST.DEFAULT_TRANSFORMS()
-        self.transform = transforms.ToTensor()
+        self.transform = CONST.DEFAULT_TRANSFORMS()
+        #self.transform = transforms.ToTensor()
         
         self.prepare_filenames()
 
@@ -269,7 +367,17 @@ class GenerativeDatamodule(pl.LightningDataModule):
     
     def setup(self, stage:str=None) -> None:
         if stage == 'fit' or stage is None:
-            self.train_dataset = GenerativeDataset(
+            #self.train_dataset = GenerativeDataset(
+            self.train_dataset = PeraDataset(
+                self.val_images_filenames,
+                imsize=self.imsize,
+                transform=self.transform,
+                polygons=self.polygoned,
+                colorized_scar=self.colorized_scar,
+                patch_localization=self.patch_localization,
+                patch_size=self.patch_size)
+            #self.val_dataset = GenerativeDataset(
+            self.val_dataset = PeraDataset(
                 self.train_images_filenames,
                 imsize=self.imsize,
                 transform=self.transform,
@@ -278,17 +386,9 @@ class GenerativeDatamodule(pl.LightningDataModule):
                 patch_localization=self.patch_localization,
                 patch_size=self.patch_size)
             
-            self.val_dataset = GenerativeDataset(
-                self.val_images_filenames,
-                imsize=self.imsize,
-                transform=self.transform,
-                polygons=self.polygoned,
-                colorized_scar=self.colorized_scar,
-                patch_localization=self.patch_localization,
-                patch_size=self.patch_size)
-            
         if stage == 'test' or stage is None:
-            self.test_dataset = GenerativeDataset(
+            #self.test_dataset = GenerativeDataset(
+            self.test_dataset = PeraDataset(
                 self.test_images_filenames,
                 imsize=self.imsize,
                 transform=self.transform,
@@ -304,7 +404,7 @@ class GenerativeDatamodule(pl.LightningDataModule):
             batch_size=self.batch_size, 
             shuffle=True,
             drop_last=True,
-            num_workers=CONST.DEFAULT_NUM_WORKERS())
+            num_workers=8)
 
 
     def val_dataloader(self):
@@ -313,7 +413,7 @@ class GenerativeDatamodule(pl.LightningDataModule):
             batch_size=self.batch_size, 
             shuffle=False,
             drop_last=True,
-            num_workers=CONST.DEFAULT_NUM_WORKERS())
+            num_workers=8)
     
     
     def test_dataloader(self):
@@ -321,11 +421,11 @@ class GenerativeDatamodule(pl.LightningDataModule):
             self.test_dataset, 
             batch_size=self.batch_size, 
             shuffle=False,
-            num_workers=CONST.DEFAULT_NUM_WORKERS())
+            num_workers=8)
         
     def predict_dataloader(self):
         return DataLoader(
             self.test_dataset, 
             batch_size=self.batch_size, 
             shuffle=False,
-            num_workers=CONST.DEFAULT_NUM_WORKERS())
+            num_workers=8)

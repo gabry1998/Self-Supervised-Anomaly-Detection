@@ -23,24 +23,19 @@ class Container:
         self.height = self.bottom - self.top
 
 
-def obj_mask(image, patch_localization:bool=False):
-    if patch_localization:
-        image = image.filter(ImageFilter.SHARPEN)
+def obj_mask(image):
     gray = np.array(image.convert('L'))
-    if patch_localization:
-        edged_image = feature.canny(gray,sigma=1.5, high_threshold=30)
-    else:
-        edged_image = feature.canny(gray, sigma=1.5, low_threshold=5, high_threshold=15)
-        structure = square(3)
-        edged_image = binary_dilation(edged_image, structure).astype(int)
-        edged_image = binary_closing(edged_image, structure)
-        edged_image = ndimage.binary_fill_holes(edged_image, structure).astype(int)
-        structure = square(4)
-        edged_image = binary_erosion(edged_image, structure).astype(int)
+    edged_image = feature.canny(gray, sigma=1.5, low_threshold=5, high_threshold=15)
+    structure = square(3)
+    edged_image = binary_dilation(edged_image, structure).astype(int)
+    edged_image = binary_closing(edged_image, structure)
+    edged_image = ndimage.binary_fill_holes(edged_image, structure).astype(int)
+    structure = square(4)
+    edged_image = binary_erosion(edged_image, structure).astype(int)
     edged_image = (edged_image*255).astype(np.uint8)
     labels = label(edged_image)
     edged_image = labels == np.argmax(np.bincount(labels.flat, weights=edged_image.flat))
-    return edged_image
+    return Image.fromarray(edged_image).convert('RGB')
 
 
 def polygonize(patch, min_points:int=5, max_points:int=15):
@@ -56,7 +51,22 @@ def polygonize(patch, min_points:int=5, max_points:int=15):
     return mask
 
 
-def get_coordinates_by_container(
+
+def rect2poly(patch):
+    width, height = patch.size
+    mask = Image.new('RGBA', (patch.size), (0,0,0,0)) 
+    draw = ImageDraw.Draw(mask)
+    points = [
+        (0, random.randint(10, height)), #left
+        (random.randint(10, width), 0), #top
+        (width, random.randint(10, height)), #right
+        (random.randint(10, width), height), #bottom
+    ]
+
+    draw.polygon(points, fill='white')
+    return mask
+
+def check_valid_coordinates_by_container(
         imsize:tuple, 
         patchsize:tuple,
         current_coords:tuple=None,
@@ -111,7 +121,7 @@ def generate_patch(
     # parte da tagliare
     patch_left, patch_top = random.randint(0, org_w - patch_w), random.randint(0, org_h - patch_h)
     patch_right, patch_bottom = patch_left + patch_w, patch_top + patch_h
-        
+
     cropped_patch = image.crop((patch_left, patch_top, patch_right, patch_bottom))
     if augs:
         cropped_patch = augs(cropped_patch)
@@ -163,10 +173,11 @@ def generate_scar(
     
     
     if colorized:
-        r = random.randint(30,220)
-        g = random.randint(30,220)
-        b = random.randint(30,220)
-        color = (r,g,b)
+        #r = random.randint(30,220)
+        #g = random.randint(30,220)
+        #b = random.randint(30,220)
+        #color = (r,g,b)
+        color = random.choice(['green','red','yellow','blue','orange','cyan','purple'])
         scar = Image.new('RGBA', (scar_w, scar_h), color=color)
     else:
         scar = image.crop((patch_left, patch_top, patch_right, patch_bottom))
@@ -181,7 +192,12 @@ def generate_scar(
 
 
 def get_random_coordinate(binary_mask):
+    binary_mask = np.array(binary_mask.convert('1'))
     xy_coords = np.flip(np.column_stack(np.where(binary_mask == 1)), axis=1)
+    if xy_coords == []:
+        return None
+    if len(xy_coords) == 1:
+        return xy_coords[0]
     idx = random.randint(0, len(xy_coords)-1)
     return xy_coords[idx]
 
@@ -205,8 +221,4 @@ def paste_patch(image, patch, coords, mask=None, center:tuple=None, debug:bool=F
         aug_image.paste(Image.new('RGB', (2,2), 'red'), (coords[0], coords[1]), None)
         aug_image.paste(Image.new('RGB', (2,2), 'green'), (center[0], center[1]), None)
     return aug_image
-
-
-def random_color():
-    return random.randint(10,240)
 

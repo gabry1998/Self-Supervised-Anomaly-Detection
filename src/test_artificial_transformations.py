@@ -12,27 +12,30 @@ import time
 import os
 from torchvision import transforms
 
-def do_patch(img, patch_localization=False):
+def do_patch(img, segmentation=None):
     start = time.time()
-    segmentation = obj_mask(img, patch_localization=patch_localization)
     coords = get_random_coordinate(segmentation)
-    patch = generate_patch(img, augs=CPP.jitter_transforms)
-    coords, center = get_coordinates_by_container(
+    patch = generate_patch(
+        img, 
+        area_ratio=CPP.cutpaste_augmentations['patch']['area_ratio'],
+        aspect_ratio=CPP.cutpaste_augmentations['patch']['aspect_ratio'],
+        augs=CPP.jitter_transforms)
+    patch = patch.filter(ImageFilter.SHARPEN)
+    coords, center = check_valid_coordinates_by_container(
         img.size, 
         patch.size, 
         current_coords=coords,
-        container_scaling_factor=1)
-    mask = None
-    mask = polygonize(patch, 3,9)
+        container_scaling_factor=1.75)
+    mask = rect2poly(patch)
     out = paste_patch(img, patch, coords, mask, center)
     end = time.time() - start
     print('patch created in', end, 'sec')
     return out
 
 
-def do_scar(img, patch_localization=False):
+def do_scar(img, segmentation=None):
     start = time.time()
-    segmentation = obj_mask(img, patch_localization)
+    #segmentation = obj_mask(img)
     coords = get_random_coordinate(segmentation)
     scar= generate_scar(
             img,
@@ -42,43 +45,15 @@ def do_scar(img, patch_localization=False):
         )
     angle = random.randint(-45,45)
     scar = scar.rotate(angle, expand=True)
-    coords, center = get_coordinates_by_container(
+    coords, center = check_valid_coordinates_by_container(
         img.size, 
         scar.size, 
         current_coords=coords,
-        container_scaling_factor=1)
+        container_scaling_factor=2.5)
     out = paste_patch(img, scar, coords, scar, center)
     end = time.time() - start
     print('scar created in', end, 'sec')
     return out
-
-
-def do_mask(image, patch_localization=False):
-    start = time.time()
-    mask = obj_mask(image, patch_localization)
-    end = time.time() - start
-    print('mask created in', end, 'sec')
-    return Image.fromarray(mask).convert('RGB')
-
-
-def do_swirl(img, patch_localization=False):
-    start = time.time()
-    segmentation = obj_mask(img, patch_localization)
-    coords = get_random_coordinate(segmentation)
-    coords, center = get_coordinates_by_container(
-        img.size, 
-        (0,0), 
-        current_coords=coords,
-        container_scaling_factor=2.5)
-    img = generate_swirl(
-            img,
-            coords,
-            swirl_strength=(3,5),
-            swirl_radius=(75,100)
-        )
-    end = time.time() - start
-    print('swirl created in', end, 'sec')
-    return img
 
 
 def save_fig(my_array, saving_path=None, name='plot.png'):
@@ -100,7 +75,7 @@ def save_fig(my_array, saving_path=None, name='plot.png'):
     plt.close()
     
 
-def plot_together(good, def1, def2, masks, saving_path=None, name='plot.png'):
+def plot_together(good, def1, def2=None, masks=None, saving_path=None, name='plot.png'):
     if saving_path and not os.path.exists(saving_path):
         os.makedirs(saving_path)
     img = good[0]
@@ -115,9 +90,10 @@ def plot_together(good, def1, def2, masks, saving_path=None, name='plot.png'):
       [np.array(def1[i]), np.array(hseparator)]
       ) if i < len(def1)-1 else np.array(def1[i]) for i in range(len(def1))])
     
+
     def2 = np.hstack([np.hstack(
-      [np.array(def2[i]), np.array(hseparator)]
-      ) if i < len(def2)-1 else np.array(def2[i]) for i in range(len(def2))])
+    [np.array(def2[i]), np.array(hseparator)]
+    ) if i < len(def2)-1 else np.array(def2[i]) for i in range(len(def2))])
     
     masks = np.hstack([np.hstack(
       [np.array(masks[i]), np.array(hseparator)]
@@ -132,7 +108,6 @@ def plot_together(good, def1, def2, masks, saving_path=None, name='plot.png'):
         np.vstack([def1, vseparator]), 
         np.vstack([def2, vseparator]),
         masks])
-    
         
     plt.figure(figsize=(30,30))
     plt.imshow(tot)
@@ -155,60 +130,70 @@ def test_augmentations():
         masks = []
         patches = []
         scars = []
-        swirls = []
         for i in range(6):
             img = Image.open(images[i]).resize(imsize).convert('RGB')
+            mask = obj_mask(img)
             if patch_localization:
-                img = transforms.RandomCrop((64,64))(img)
-            patch = do_patch(img, patch_localization)
-            scar = do_scar(img, patch_localization)
-            mask = do_mask(img, patch_localization)
-            swirl_im = do_swirl(img, patch_localization)
+                cropper = Container(img.size, 1.25)
+                x = img.crop((cropper.left, cropper.top, cropper.right, cropper.bottom))
+                mask = mask.crop((cropper.left, cropper.top, cropper.right, cropper.bottom))
+                
+                left = random.randint(0,x.size[0]-64)
+                top = random.randint(0,x.size[1]-64)
+                x = x.crop((left,top, left+64, top+64))
+                mask = mask.crop((left,top, left+64, top+64))
+                #x = transforms.RandomCrop((64,64))(x)
+            else:
+                x = img.copy()
+                    
+            patch = do_patch(img, mask)
+            scar = do_scar(img, mask)
             goods.append(np.array(img))
-            swirls.append(np.array(swirl_im))
             patches.append(np.array(patch))
             scars.append(np.array(scar))
             masks.append(np.array(mask))
         
         if patch_localization:
             plot_together(goods, patches, scars, masks, 'outputs/dataset_analysis/'+sub+'/', sub+'_artificial_crop.png')
-            save_fig(patches, 'outputs/dataset_analysis/'+sub+'/', sub+'_patch_crop.png')
-            save_fig(scars, 'outputs/dataset_analysis/'+sub+'/', sub+'_scar_crop.png')
-            save_fig(swirls, 'outputs/dataset_analysis/'+sub+'/', sub+'_swirl_crop.png')
-            save_fig(masks, 'outputs/dataset_analysis/'+sub+'/', sub+'_mask_crop.png')
+            #save_fig(patches, 'outputs/dataset_analysis/'+sub+'/', sub+'_patch_crop.png')
+            #save_fig(scars, 'outputs/dataset_analysis/'+sub+'/', sub+'_scar_crop.png')
+            #save_fig(masks, 'outputs/dataset_analysis/'+sub+'/', sub+'_mask_crop.png')
         else:
             plot_together(goods, patches, scars, masks, 'outputs/dataset_analysis/'+sub+'/', sub+'_artificial.png')
-            save_fig(patches, 'outputs/dataset_analysis/'+sub+'/', sub+'_patch.png')
-            save_fig(scars, 'outputs/dataset_analysis/'+sub+'/', sub+'_scar.png')
-            save_fig(swirls, 'outputs/dataset_analysis/'+sub+'/', sub+'_swirl.png')
-            save_fig(masks, 'outputs/dataset_analysis/'+sub+'/', sub+'_mask.png')
+            #save_fig(patches, 'outputs/dataset_analysis/'+sub+'/', sub+'_patch.png')
+            #save_fig(scars, 'outputs/dataset_analysis/'+sub+'/', sub+'_scar.png')
+            #save_fig(masks, 'outputs/dataset_analysis/'+sub+'/', sub+'_mask.png')
         os.system('clear')
      
 
 def check_all_subject():
     subjects = get_all_subject_experiments('dataset/')
     imsize=(256,256)
-    patch_localization = True
+    patch_localization = False
     
     goods = []
     masks = []
     patches = []
     scars = []
-    swirls = []
     for subject in subjects:
-        img = Image.open('dataset/'+subject+'/train/good/000.png').resize(imsize).convert('RGB')
+        img = Image.open('dataset/'+subject+'/train/good/005.png').resize(imsize).convert('RGB')
+        mask = obj_mask(img)
         if patch_localization:
             cropper = Container(img.size, 1.25)
             x = img.crop((cropper.left, cropper.top, cropper.right, cropper.bottom))
-            x = transforms.RandomCrop((64,64))(x)
+            mask = mask.crop((cropper.left, cropper.top, cropper.right, cropper.bottom))
+            
+            left = random.randint(0,x.size[0]-64)
+            top = random.randint(0,x.size[1]-64)
+            x = x.crop((left,top, left+64, top+64))
+            mask = mask.crop((left,top, left+64, top+64))
+            #x = transforms.RandomCrop((64,64))(x)
+            
         else:
             x = img.copy()
-        patch = do_patch(x, patch_localization)
-        scar = do_scar(x, patch_localization)
-        mask = do_mask(x, patch_localization)
-        swirl_im = do_swirl(img, patch_localization)
+        patch = do_patch(x, mask)
+        scar = do_scar(x, mask)
         goods.append(np.array(x))
-        swirls.append(np.array(swirl_im))
         patches.append(np.array(patch))
         scars.append(np.array(scar))
         masks.append(np.array(mask))
@@ -221,7 +206,7 @@ def check_all_subject():
     os.system('clear')
     
     
-#test_augmentations()
+test_augmentations()
 check_all_subject()
 
 

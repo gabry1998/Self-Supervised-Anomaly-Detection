@@ -3,6 +3,7 @@ from sklearn.covariance import LedoitWolf
 from sklearn.neighbors import KernelDensity
 from scipy.stats import gaussian_kde
 from torch import nn
+from torchsummary import summary as torch_summary
 import torch
 from torchvision import models
 import pytorch_lightning as pl
@@ -18,6 +19,221 @@ from numpy.linalg import norm
 from self_supervised.support.functional import get_prediction_class, gt2label
 
 
+class PeraNet(pl.LightningModule):
+    def __init__(
+            self, 
+            latent_space_dims:list=[512,512,512,512,512,512,512,512,512,512,512],
+            backbone:str='resnet18',
+            lr:float=0.03,
+            num_epochs:int=30,
+            num_classes:int=3) -> None:
+        super(PeraNet, self).__init__()
+        self.save_hyperparameters()
+        self.lr = lr
+        self.num_epochs = num_epochs
+        self.backbone = backbone
+        self.latent_space_dims = latent_space_dims
+        
+        self.feature_extractor = self.setup_backbone(backbone)
+        self.latent_space = self.setup_latent_space(latent_space_dims)
+        self.classifier = self.setup_classifier(latent_space_dims[-1], num_classes)
+        
+        self.mvtec = False
+        self.num_classes = num_classes
+    
+    def summary(self):
+        torch_summary(self.to('cpu'), (3,256,256), device='cpu')
+        
+    def setup_backbone(self, backbone:str) -> nn.Sequential:
+        if backbone == 'resnet18':
+            model = models.resnet18(weights="IMAGENET1K_V1")
+        layers = list(model.children())[:-1]
+        feature_extractor = nn.Sequential(*layers)
+        return feature_extractor
+    
+    
+    def setup_latent_space(self, dims:list) -> nn.Sequential:
+        proj_layers = []
+        for d in dims[:-1]:
+            layer = nn.Linear(d,d, bias=False)
+            proj_layers.append(layer),
+            proj_layers.append((nn.BatchNorm1d(d))),
+            proj_layers.append(nn.ReLU(inplace=True))
+        embeds = nn.Linear(dims[-2], dims[-1], bias=True)
+        proj_layers.append(embeds)
+        
+        projection_head = nn.Sequential(
+            *proj_layers
+        )
+        return projection_head
+    
+    
+    def setup_classifier(self, input_dim:int, num_classes:int) -> nn.Linear:
+        return nn.Linear(input_dim, num_classes)
+
+    
+    def enable_mvtec_inference(self):
+        self.mvtec = True
+    
+    def disable_mvtec_inference(self):
+        self.mvtec = False
+
+    def unfreeze_net(self, modules:list=['backbone', 'latent_space']):
+        if 'backbone' in modules:
+            for param in self.feature_extractor.parameters():
+                param.requires_grad = True
+        if 'latent_space' in modules:
+            for param in self.latent_space.parameters():
+                param.requires_grad = True
+    
+    
+    def freeze_net(self, modules:list=['backbone', 'latent_space']):
+        if 'backbone' in modules:
+            for param in self.feature_extractor.parameters():
+                param.requires_grad = False
+            self.feature_extractor.eval()
+        if 'latent_space' in modules:
+            for param in self.latent_space.parameters():
+                param.requires_grad = False
+            self.latent_space.eval()
+
+
+    def layer_activations(self, x, layer:str='layer4'):
+        x = self.feature_extractor.conv1(x)
+        x = self.feature_extractor.bn1(x)
+        x = self.feature_extractor.relu(x)
+        x = self.feature_extractor.maxpool(x)
+
+        l1 = self.feature_extractor.layer1(x)
+        l2 = self.feature_extractor.layer2(l1)
+        l3 = self.feature_extractor.layer3(l2)
+        l4 = self.feature_extractor.layer4(l3)
+        
+        if layer=='layer1':
+            return l1
+        if layer=='layer2':
+            return l2
+        if layer=='layer3':
+            return l3
+        if layer=='layer4':
+            return l4
+        
+        
+    def forward(self, x):
+        output = {}
+        
+        features = self.feature_extractor(x)
+        features = torch.flatten(features, 1)
+        embeddings = self.latent_space(features)
+        y_hat = self.classifier(embeddings)
+        
+        output['classifier'] = y_hat
+        output['latent_space'] = embeddings
+        return output
+    
+    
+    def training_step(self, batch, batch_idx):    
+        x, y = batch
+        
+        outputs = self(x)
+        y_hat = outputs['classifier']
+        loss = F.cross_entropy(y_hat, y)
+        acc = accuracy(y_hat, y)
+
+        metrics = {"train_accuracy": acc, "train_loss": loss}
+        self.log_dict(metrics,
+                      on_step=False,
+                      on_epoch=True,
+                      prog_bar=True)
+        return loss
+
+    
+    def validation_step(self, batch, batch_idx):
+        x, y = batch
+        
+        outputs = self(x)
+        y_hat = outputs['classifier']
+        loss = F.cross_entropy(y_hat, y)
+        acc = accuracy(y_hat, y)
+
+        metrics = {"val_accuracy": acc, "val_loss": loss}
+        self.log_dict(metrics,
+                      on_step=False,
+                      on_epoch=True,
+                      prog_bar=True)
+
+        return metrics
+
+
+    def test_step(self, batch, batch_idx):
+        x, y = batch
+        if self.mvtec:
+            y = torch.tensor(gt2label(y))
+            if torch.cuda.is_available():
+                y = y.to('cuda')
+            else:
+                y = y.to('cpu')
+        
+        outputs = self(x)
+        y_hat = outputs['classifier']
+        
+        loss = F.cross_entropy(y_hat, y)
+        acc = accuracy(y_hat, y)
+        
+        metrics = {"test_accuracy": acc, "test_loss": loss}
+        self.log_dict(metrics,
+                      on_step=False,
+                      on_epoch=True,
+                      prog_bar=True)
+        
+        return metrics
+    
+    
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        outputs = {
+            'x':None,
+            'y_true':None,
+            'y_tsne':None,
+            'y_hat':None,
+            'groundtruth':None,
+            'embedding':None
+        }
+        x, groundtruths = batch
+        if self.mvtec:
+            y = torch.tensor(gt2label(groundtruths))
+            y_tsne = torch.tensor(gt2label(groundtruths, negative=0, positive=self.num_classes))
+            if torch.cuda.is_available():
+                y = y.to('cuda')
+                y_tsne = y_tsne.to('cuda')
+            else:
+                y_tsne = y_tsne.to('cpu')
+                y_tsne = y_tsne.to('cpu')
+            outputs['y_true'] = y
+            outputs['y_tsne'] = y_tsne 
+            outputs['groundtruth'] = groundtruths
+        else:
+            outputs['y_true'] = groundtruths
+            outputs['y_tsne'] = groundtruths 
+            outputs['groundtruth'] = None  
+            
+        predictions = self(x)
+        y_hat = get_prediction_class(predictions['classifier'])
+        
+        outputs['x'] = x
+        outputs['embedding'] = predictions['latent_space']
+        outputs['y_hat'] = y_hat
+        
+        return outputs
+    
+    
+    def configure_optimizers(self):
+        optimizer = torch.optim.SGD(self.parameters(), self.lr, momentum=0.9, weight_decay=0.00003)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, self.num_epochs)
+        return [optimizer], [scheduler]
+    
+    
+        
+        
 class SSLModel(nn.Module):
     def __init__(self, 
                 num_classes:int,
@@ -38,7 +254,6 @@ class SSLModel(nn.Module):
         for d in dims[:-1]:
             layer = nn.Linear(d,d, bias=False)
             proj_layers.append(layer),
-            #proj_layers.append(nn.Dropout(0.10)),
             proj_layers.append((nn.BatchNorm1d(d))),
             proj_layers.append(nn.ReLU(inplace=True))
         embeds = nn.Linear(dims[-2], dims[-1], bias=self.num_classes > 0)
