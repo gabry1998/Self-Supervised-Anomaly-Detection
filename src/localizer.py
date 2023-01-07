@@ -186,8 +186,8 @@ def obj_set_two():
 
 if __name__ == "__main__":
     dataset_dir='dataset/'
-    root_inputs_dir='brutta_brutta_copia/computations/'
-    root_outputs_dir='brutta_brutta_copia/localization/'
+    root_inputs_dir='outputs/computations/'
+    root_outputs_dir='outputs/localization/'
     num_images=3,
     imsize=(256,256),
     seed=204110176,
@@ -198,7 +198,7 @@ if __name__ == "__main__":
     obj1 = obj_set_one()
     obj2 = obj_set_two()
     
-    experiments_list = textures
+    experiments_list = experiments
     pbar = tqdm(range(len(experiments_list)), position=0, leave=False)
     for i in pbar:
         pbar.set_description('Localization pipeline | current subject is '+experiments_list[i].upper())
@@ -208,7 +208,7 @@ if __name__ == "__main__":
             root_output_dir=root_outputs_dir,
             subject=experiments_list[i],
             model_name='best_model.ckpt',
-            patch_localization=True,
+            patch_localization=False,
             seed=0
         )
         localizer.setup_model()
