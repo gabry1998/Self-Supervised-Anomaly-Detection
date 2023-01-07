@@ -1,8 +1,6 @@
-from self_supervised.model import SSLModel, PeraNet
+from self_supervised.model import PeraNet
 import torch
 import torch.nn.functional as F
-import numpy as np
-import pytorch_lightning as pl
 
 
 

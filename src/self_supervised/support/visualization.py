@@ -127,37 +127,40 @@ def plot_heatmap_and_masks(
         image, 
         heatmap, 
         gt_mask, 
-        predicted_mask, 
+        predicted_mask=None, 
         saving_path:str=None, 
         name:str='heatmap_and_masks.png'):
     
     if saving_path and not os.path.exists(saving_path):
         os.makedirs(saving_path)
-    
-    fig, axs = plt.subplots(1,4, figsize=(16,16))
+    if not predicted_mask==None:
+        fig, axs = plt.subplots(1,4, figsize=(16,16))
+    else:
+        fig, axs = plt.subplots(1,3, figsize=(16,16))
     
     axs[0].axis('off')
     axs[0].set_title('original')
     axs[0].imshow(image)
     
     axs[1].axis('off')
-    axs[1].set_title('localization')
-    axs[1].imshow(heatmap)
+    axs[1].set_title('groundtruth')
+    axs[1].imshow(np.array(gt_mask, dtype=float))
     
     axs[2].axis('off')
-    axs[2].set_title('groundtruth')
-    axs[2].imshow(np.array(gt_mask, dtype=float))
+    axs[2].set_title('localization')
+    axs[2].imshow(heatmap)
     
-    axs[3].axis('off')
-    axs[3].set_title('predicted mask')
-    axs[3].imshow(np.array(predicted_mask, dtype=float))
+    if not predicted_mask==None:
+        axs[3].axis('off')
+        axs[3].set_title('predicted mask')
+        axs[3].imshow(np.array(predicted_mask, dtype=float))
     if saving_path:
         plt.savefig(saving_path+name, bbox_inches='tight')
     else:
         plt.savefig(name, bbox_inches='tight')
     plt.close()
 
-def localize(image:Tensor, heatmap:Tensor):
+def apply_heatmap(image:Tensor, heatmap:Tensor):
     #image is (1, 3, H, W)
     #heatmap is (1, 1, H, W)
     heatmap = cv2.applyColorMap(np.uint8(255 * heatmap.squeeze()), cv2.COLORMAP_JET)

@@ -2,62 +2,159 @@ from self_supervised.support.dataset_generator import *
 from self_supervised.support.functional import *
 from self_supervised.datasets import GenerativeDatamodule
 from self_supervised.support.cutpaste_parameters import CPP
-from skimage import feature
-from skimage.morphology import square, label
-from scipy import ndimage
-from scipy.ndimage import binary_dilation, binary_erosion, binary_closing
-from PIL import Image, ImageOps
+from torchvision import transforms
+from PIL import Image, ImageFilter
 import matplotlib.pyplot as plt
 import numpy as np
 import time
 import os
-from torchvision import transforms
 import collections
+import cv2 
 
-def do_patch(img, segmentation=None):
-    start = time.time()
+
+def apply_wrinkle(img, wrinkles):
+    img = np.array(img).astype("float32") / 255.0
+    wrinkles = np.array(wrinkles.convert('L')).astype("float32") / 255.0
+    # apply linear transform to stretch wrinkles to make shading darker
+    # C = A*x+B
+    # x=1 -> 1; x=0.25 -> 0
+    # 1 = A + B
+    # 0 = 0.25*A + B
+    # Solve simultaneous equations to get:
+    # A = 1.33
+    # B = -0.33
+    wrinkles = 1.33 * wrinkles -0.33
+
+    # threshold wrinkles and invert
+    thresh = cv2.threshold(wrinkles,0.5,1,cv2.THRESH_BINARY)[1]
+    thresh = cv2.cvtColor(thresh,cv2.COLOR_GRAY2BGR) 
+    thresh_inv = 1-thresh
+
+    # shift image brightness so mean is mid gray
+    mean = np.mean(wrinkles)
+    shift = mean - 0.5
+    wrinkles = cv2.subtract(wrinkles, shift)
+
+    # convert wrinkles from grayscale to rgb
+    wrinkles = cv2.cvtColor(wrinkles,cv2.COLOR_GRAY2BGR) 
+
+    # do hard light composite and convert to uint8 in range 0 to 255
+    # see CSS specs at https://www.w3.org/TR/compositing-1/#blendinghardlight
+    low = 2.0 * img * wrinkles
+    high = 1 - 2.0 * (1-img) * (1-wrinkles)
+    result = ( 255 * (low * thresh_inv + high * thresh) ).clip(0, 255).astype(np.uint8)
+    return Image.fromarray(result).convert('RGB')
+
+
+def generate_wrinkle(patch):
+    wrinkle = Image.open('wrinkled.png').convert('RGBA')
+    wrinkle_left = random.randint(0, wrinkle.size[0] - patch.width) 
+    wrinkle_top = random.randint(0, wrinkle.size[1] - patch.height)
+    wrinkle_right, wrinkle_bottom = wrinkle_left + patch.width, wrinkle_top + patch.height
+    wrinkle = wrinkle.crop((wrinkle_left, wrinkle_top, wrinkle_right, wrinkle_bottom))
+    return wrinkle
+
+
+def check_valid_coords(center, imsize, patchsize):
+    width, height = imsize
+    patch_width, patch_height = patchsize
+    patch_left = center[0] - int(patch_width/2)
+    patch_top = center[1] - int(patch_height/2)
+    if patch_left < 0:
+        patch_left = int(width/2) - patch_width
+    if patch_top < 0:
+        patch_top = int(height/2) - patch_height
+         
+    patch_right = patch_left + patch_width
+    patch_bottom = patch_top + patch_height
+    if patch_right > width:
+        patch_left = int(width/2) - patch_width
+    if patch_bottom > height:
+        patch_top = int(height/2) - patch_height
+    return (patch_left, patch_top, patch_right, patch_bottom)
+
+
+def do_patch(img, original=None, segmentation=None, subject=None, patch_loc=False):
+    factor = 2
+    if patch_loc:
+        factor = 1
+    #segmentation = obj_mask(img)
     coords = get_random_coordinate(segmentation)
-    rotations = [90,180,270]
-    temp = img.rotate(random.choice(rotations))
-    patch = generate_patch(
-        temp, 
-        area_ratio=CPP.cutpaste_augmentations['patch']['area_ratio'],
-        aspect_ratio=CPP.cutpaste_augmentations['patch']['aspect_ratio'],
-        augs=CPP.jitter_transforms)
-    patch = patch.filter(ImageFilter.SHARPEN)
-    coords, center = check_valid_coordinates_by_container(
+    area_ratio = CPP.cutpaste_augmentations['patch']['area_ratio']
+    aspect_ratio = CPP.cutpaste_augmentations['patch']['aspect_ratio']
+    start = time.time()
+    x = img.copy()
+    classes = get_all_subject_experiments('dataset/')
+    idx = np.where(classes == subject)
+    random_subject = random.choice(np.delete(classes, idx))
+    cutting = Image.open('dataset/'+random_subject+'/train/good/000.png').resize((256,256)).convert('RGB')
+    if subject in np.array(['carpet','grid','leather','tile','wood']):
+        patch = generate_patch(
+            cutting,
+            area_ratio=[0.02, 0.05],
+            aspect_ratio=aspect_ratio,
+            augs=CPP.jitter_transforms,
+            colorized=False)
+    else:
+        patch = generate_patch(
+            original,
+            area_ratio=[0.02, 0.09],
+            aspect_ratio=aspect_ratio,
+            augs=CPP.jitter_transforms,
+            colorized=False)
+    coords, _ = check_valid_coordinates_by_container(
         img.size, 
         patch.size, 
         current_coords=coords,
-        container_scaling_factor=1.75)
-    mask = rect2poly(patch)
-    out = paste_patch(img, patch, coords, mask, center)
+        container_scaling_factor=factor
+    )
+    mask = None
+    mask = rect2poly(patch, regular=False, sides=8)
+    x = paste_patch(x, patch, coords, mask)
     end = time.time() - start
     print('patch created in', end, 'sec')
-    return out
+    return x
 
 
-def do_scar(img, segmentation=None):
+def do_scar(img, original=None, segmentation=None, subject=None, patch_loc=False):
+    factor = 2.5
+    if patch_loc:
+        factor = 1
     start = time.time()
-    #segmentation = obj_mask(img)
     coords = get_random_coordinate(segmentation)
-    scar= generate_scar(
-            img,
-            colorized=True,
-            with_padding=True,
-            augs=CPP.jitter_transforms
+    classes = np.array(get_all_subject_experiments('dataset/'))
+    x = img.copy()
+    idx = np.where(classes == subject)
+    
+    if subject in np.array(['carpet','grid','leather','tile','wood']):
+        random_subject = random.choice(np.delete(classes, idx))
+        cutting = Image.open('dataset/'+random_subject+'/train/good/000.png').resize((256,256)).convert('RGB')
+        scar= generate_scar(
+            cutting,
+            colorized=False,
+            augs=CPP.jitter_transforms,
+            color_type='average' # random, average, sample
         )
-    angle = random.randint(-45,45)
-    scar = scar.rotate(angle, expand=True)
-    coords, center = check_valid_coordinates_by_container(
+    else:
+        scar= generate_scar(
+            original,
+            colorized=False,
+            augs=CPP.jitter_transforms,
+            color_type='average' # random, average, sample
+        )
+    coords, _ = check_valid_coordinates_by_container(
         img.size, 
         scar.size, 
         current_coords=coords,
-        container_scaling_factor=2.5)
-    out = paste_patch(img, scar, coords, scar, center)
+        container_scaling_factor=factor
+    )
+    angle = random.randint(-45,45)
+    scar = scar.rotate(angle, expand=True)
+    x = paste_patch(x, scar, coords, scar)
+    
     end = time.time() - start
     print('scar created in', end, 'sec')
-    return out
+    return x
 
 
 def save_fig(my_array, saving_path=None, name='plot.png'):
@@ -94,10 +191,10 @@ def plot_together(good, def1, def2=None, masks=None, saving_path=None, name='plo
       [np.array(def1[i]), np.array(hseparator)]
       ) if i < len(def1)-1 else np.array(def1[i]) for i in range(len(def1))])
     
-
-    def2 = np.hstack([np.hstack(
-    [np.array(def2[i]), np.array(hseparator)]
-    ) if i < len(def2)-1 else np.array(def2[i]) for i in range(len(def2))])
+    if def2 is not None:
+        def2 = np.hstack([np.hstack(
+        [np.array(def2[i]), np.array(hseparator)]
+        ) if i < len(def2)-1 else np.array(def2[i]) for i in range(len(def2))])
     
     masks = np.hstack([np.hstack(
       [np.array(masks[i]), np.array(hseparator)]
@@ -107,11 +204,17 @@ def plot_together(good, def1, def2=None, masks=None, saving_path=None, name='plo
       mode='RGB', 
       size=(good_images.shape[1], 6), 
       color=(255,255,255)))
-    tot = np.vstack([
-        np.vstack([good_images, vseparator]), 
-        np.vstack([def1, vseparator]), 
-        np.vstack([def2, vseparator]),
-        masks])
+    if def2 is not None:
+        tot = np.vstack([
+            np.vstack([good_images, vseparator]), 
+            np.vstack([def1, vseparator]), 
+            np.vstack([def2, vseparator]),
+            masks])
+    else:
+        tot = np.vstack([
+            np.vstack([good_images, vseparator]), 
+            np.vstack([def1, vseparator]), 
+            masks])
         
     plt.figure(figsize=(30,30))
     plt.imshow(tot)
@@ -123,10 +226,10 @@ def plot_together(good, def1, def2=None, masks=None, saving_path=None, name='plo
     plt.close()
 
 
-def test_augmentations():
+def test_augmentations(patch_localization = False):
     imsize=(256,256)
     subjects = get_all_subject_experiments('dataset/')
-    patch_localization = False
+    
     
     for sub in subjects:
         images = get_image_filenames('dataset/'+sub+'/train/good/')
@@ -134,46 +237,45 @@ def test_augmentations():
         masks = []
         patches = []
         scars = []
+        fixed_segmentation = obj_mask(Image.open('dataset/'+sub+'/train/good/000.png').resize(imsize).convert('RGB'))
         for i in range(6):
             img = Image.open(images[i]).resize(imsize).convert('RGB')
-            mask = obj_mask(img)
+            
+            if sub in np.array(['hazelnut', 'screw', 'metal_nut']):
+                mask = obj_mask(img)
+            else:
+                mask = fixed_segmentation
             if patch_localization:
-                cropper = Container(img.size, 1.25)
-                x = img.crop((cropper.left, cropper.top, cropper.right, cropper.bottom))
-                mask = mask.crop((cropper.left, cropper.top, cropper.right, cropper.bottom))
-                
+                x = img.copy()
                 left = random.randint(0,x.size[0]-64)
                 top = random.randint(0,x.size[1]-64)
                 x = x.crop((left,top, left+64, top+64))
                 mask = mask.crop((left,top, left+64, top+64))
-                #x = transforms.RandomCrop((64,64))(x)
             else:
                 x = img.copy()
-                    
-            patch = do_patch(img, mask)
-            scar = do_scar(img, mask)
-            goods.append(np.array(img))
+                
+            x = CPP.jitter_transforms(x)
+            if torch.sum(transforms.ToTensor()(mask)) > 0:
+                patch = do_patch(x,img, mask, sub, patch_localization)
+                scar = do_scar(x,img, mask, sub, patch_localization)
+            else:
+                patch = x.copy()
+                scar = x.copy()
+            goods.append(np.array(x))
             patches.append(np.array(patch))
             scars.append(np.array(scar))
             masks.append(np.array(mask))
         
         if patch_localization:
-            plot_together(goods, patches, scars, masks, 'outputs/dataset_analysis/'+sub+'/', sub+'_artificial_crop.png')
-            #save_fig(patches, 'outputs/dataset_analysis/'+sub+'/', sub+'_patch_crop.png')
-            #save_fig(scars, 'outputs/dataset_analysis/'+sub+'/', sub+'_scar_crop.png')
-            #save_fig(masks, 'outputs/dataset_analysis/'+sub+'/', sub+'_mask_crop.png')
+            plot_together(goods, patches, scars, masks, 'brutta_copia/dataset_analysis/'+sub+'/', sub+'_artificial_crop.png')
         else:
-            plot_together(goods, patches, scars, masks, 'outputs/dataset_analysis/'+sub+'/', sub+'_artificial.png')
-            #save_fig(patches, 'outputs/dataset_analysis/'+sub+'/', sub+'_patch.png')
-            #save_fig(scars, 'outputs/dataset_analysis/'+sub+'/', sub+'_scar.png')
-            #save_fig(masks, 'outputs/dataset_analysis/'+sub+'/', sub+'_mask.png')
+            plot_together(goods, patches, scars, masks, 'brutta_copia/dataset_analysis/'+sub+'/', sub+'_artificial.png')
         os.system('clear')
      
 
-def check_all_subject():
+def check_all_subject(patch_localization = False):
     subjects = get_all_subject_experiments('dataset/')
     imsize=(256,256)
-    patch_localization = False
     
     goods = []
     masks = []
@@ -181,37 +283,38 @@ def check_all_subject():
     scars = []
     for subject in subjects:
         img = Image.open('dataset/'+subject+'/train/good/005.png').resize(imsize).convert('RGB')
+        
         mask = obj_mask(img)
         if patch_localization:
-            cropper = Container(img.size, 1.25)
-            x = img.crop((cropper.left, cropper.top, cropper.right, cropper.bottom))
-            mask = mask.crop((cropper.left, cropper.top, cropper.right, cropper.bottom))
-            
-            left = random.randint(0,x.size[0]-64)
-            top = random.randint(0,x.size[1]-64)
-            x = x.crop((left,top, left+64, top+64))
+            left = random.randint(0,img.size[0]-64)
+            top = random.randint(0,img.size[1]-64)
+            x = img.crop((left,top, left+64, top+64))
             mask = mask.crop((left,top, left+64, top+64))
-            #x = transforms.RandomCrop((64,64))(x)
-            
         else:
             x = img.copy()
-        patch = do_patch(x, mask)
-        scar = do_scar(x, mask)
+        x = CPP.jitter_transforms(x)
+        if torch.sum(transforms.ToTensor()(mask)) > 0:
+            patch = do_patch(x,img, mask, subject, patch_localization)
+            scar = do_scar(x,img, mask, subject, patch_localization)
+        else:
+            patch = x.copy()
+            scar = x.copy()
         goods.append(np.array(x))
         patches.append(np.array(patch))
         scars.append(np.array(scar))
         masks.append(np.array(mask))
     
     if patch_localization:
-        plot_together(goods, patches, scars, masks, 'outputs/dataset_analysis/', 'artificial_overall_crop.png')
+        plot_together(goods, patches, scars, masks, 'brutta_copia/dataset_analysis/', 'artificial_overall_crop.png')
     else:
-        plot_together(goods, patches, scars, masks, 'outputs/dataset_analysis/', 'artificial_overall.png')
+        plot_together(goods, patches, scars, masks, 'brutta_copia/dataset_analysis/', 'artificial_overall.png')
 
     os.system('clear')
 
 
 def check_distribution():
     artificial = GenerativeDatamodule(
+        'bottle',
         'dataset/bottle/',
         (256,256),
         256,
@@ -220,9 +323,12 @@ def check_distribution():
         colorized_scar=True
     )
     artificial.setup('test')
-    labels = artificial.test_dataset.labels
-    c = collections.Counter(labels)
+    _, labels, _ = next(iter(artificial.test_dataloader()))
+    print(labels)
+    c = collections.Counter(np.array(labels))
+    print(c)
     instances = [c[x] for x in sorted(c.keys())]
+    print(instances)
     keys = sorted(c.keys())
     font_title = {
         'weight': 'bold',
@@ -236,11 +342,12 @@ def check_distribution():
     
     plt.title('Dataset distribution', fontdict=font_title)
     plt.ylabel('Frequency', fontdict=font)
-    plt.xticks([0,1,2], ['good', 'polygon patch', 'colored scar'], font=font)
+    plt.xticks([0,1,2], ['good', 'polygon patch','scar'], font=font)
     plt.savefig('distribution.png', bbox_inches='tight')
     
-test_augmentations()
-check_all_subject()
+test_augmentations(True)
+check_all_subject(True)
 #check_distribution()
+
 
 

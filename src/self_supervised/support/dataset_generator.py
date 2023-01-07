@@ -8,6 +8,7 @@ from skimage.morphology import square, label
 from skimage import feature
 from scipy import ndimage
 from scipy.ndimage import binary_dilation, binary_erosion, binary_closing
+import cv2
 
 
 
@@ -21,6 +22,50 @@ class Container:
         self.bottom = int(self.center+(self.center/scaling_factor))
         self.width = self.right - self.left
         self.height = self.bottom - self.top
+
+
+
+def apply_wrinkle(img, wrinkles):
+    img = np.array(img).astype("float32") / 255.0
+    wrinkles = np.array(wrinkles.convert('L')).astype("float32") / 255.0
+    # apply linear transform to stretch wrinkles to make shading darker
+    # C = A*x+B
+    # x=1 -> 1; x=0.25 -> 0
+    # 1 = A + B
+    # 0 = 0.25*A + B
+    # Solve simultaneous equations to get:
+    # A = 1.33
+    # B = -0.33
+    wrinkles = 1.33 * wrinkles -0.33
+
+    # threshold wrinkles and invert
+    thresh = cv2.threshold(wrinkles,0.5,1,cv2.THRESH_BINARY)[1]
+    thresh = cv2.cvtColor(thresh,cv2.COLOR_GRAY2BGR) 
+    thresh_inv = 1-thresh
+
+    # shift image brightness so mean is mid gray
+    mean = np.mean(wrinkles)
+    shift = mean - 0.5
+    wrinkles = cv2.subtract(wrinkles, shift)
+
+    # convert wrinkles from grayscale to rgb
+    wrinkles = cv2.cvtColor(wrinkles,cv2.COLOR_GRAY2BGR) 
+
+    # do hard light composite and convert to uint8 in range 0 to 255
+    # see CSS specs at https://www.w3.org/TR/compositing-1/#blendinghardlight
+    low = 2.0 * img * wrinkles
+    high = 1 - 2.0 * (1-img) * (1-wrinkles)
+    result = ( 255 * (low * thresh_inv + high * thresh) ).clip(0, 255).astype(np.uint8)
+    return Image.fromarray(result).convert('RGB')
+
+
+def generate_wrinkle(patch):
+    wrinkle = Image.open('wrinkled.png').convert('RGBA')
+    wrinkle_left = random.randint(0, wrinkle.size[0] - patch.width) 
+    wrinkle_top = random.randint(0, wrinkle.size[1] - patch.height)
+    wrinkle_right, wrinkle_bottom = wrinkle_left + patch.width, wrinkle_top + patch.height
+    wrinkle = wrinkle.crop((wrinkle_left, wrinkle_top, wrinkle_right, wrinkle_bottom))
+    return wrinkle
 
 
 def obj_mask(image):
@@ -51,20 +96,67 @@ def polygonize(patch, min_points:int=5, max_points:int=15):
     return mask
 
 
-
-def rect2poly(patch):
+def rect2poly(patch, regular:bool=False, sides:list=4):
     width, height = patch.size
     mask = Image.new('RGBA', (patch.size), (0,0,0,0)) 
     draw = ImageDraw.Draw(mask)
-    points = [
-        (0, random.randint(10, height)), #left
-        (random.randint(10, width), 0), #top
-        (width, random.randint(10, height)), #right
-        (random.randint(10, width), height), #bottom
-    ]
-
-    draw.polygon(points, fill='white')
+    if regular:
+        max_val = int(min([width, height])/2)
+        cx = int(width/2)
+        cy = int(height/2)
+        draw.regular_polygon(
+            bounding_circle=((cx,cy),max_val),
+            n_sides=random.choice(sides),
+            fill='white'
+        )
+    else:
+        if sides == 4:
+            points = [
+                (0, random.randint(1, height)), #left
+                (random.randint(1, width), 0), #top
+                (width, random.randint(1, height)), #right
+                (random.randint(1, width), height), #bottom
+                ]
+        else:
+            points = []
+            for side in range(4):
+                num_points_per_side = random.randint(1,2)
+                if side == 0: # left
+                    if num_points_per_side == 1:
+                        points.append( (0, random.randint(1, height)) )
+                    else:
+                        p1 = (0, random.randint(int(height/2)+1, height))
+                        p2 = (0, random.randint(1, int(height/2)))
+                        points.append(p1)
+                        points.append(p2)
+                if side == 1: # top
+                    if num_points_per_side == 1:
+                        points.append( (random.randint(1, width), 0) )
+                    else:
+                        p1 = (random.randint(1, int(width/2)), 0)
+                        p2 = (random.randint(int(width/2)+1, width), 0)
+                        points.append(p1)
+                        points.append(p2)
+                if side == 2: # right
+                    if num_points_per_side == 1:
+                        points.append( (width, random.randint(1, height)) )
+                    else:
+                        p1 = (width, random.randint(1, int(height/2)))
+                        p2 = (width, random.randint(int(height/2)+1, height))
+                        points.append(p1)
+                        points.append(p2)
+                if side == 3: # bottom
+                    if num_points_per_side == 1:
+                        points.append( (random.randint(1, width), height) )
+                    else:
+                        p1 = (random.randint(int(width/2)+1, width), height)
+                        p2 = (random.randint(1, int(width/2)), height)
+                        points.append(p1)
+                        points.append(p2)
+        draw.polygon(
+            points, fill='white')
     return mask
+
 
 def check_valid_coordinates_by_container(
         imsize:tuple, 
@@ -103,13 +195,15 @@ def check_valid_coordinates_by_container(
         center_y = container.bottom
         paste_top = center_y - int(patchsize[1]/2)
     return (paste_left, paste_top), (center_x, center_y)
+
    
-    
 def generate_patch(
         image, 
         area_ratio:tuple=(0.02, 0.15), 
         aspect_ratio:tuple=((0.3, 1),(1, 3.3)),
-        augs=None):
+        augs=None,
+        colorized:bool=False,
+        color_type:str='random'):
 
     img_area = image.size[0] * image.size[1]
     patch_area = random.uniform(area_ratio[0], area_ratio[1]) * img_area
@@ -121,35 +215,28 @@ def generate_patch(
     # parte da tagliare
     patch_left, patch_top = random.randint(0, org_w - patch_w), random.randint(0, org_h - patch_h)
     patch_right, patch_bottom = patch_left + patch_w, patch_top + patch_h
+    
+    if colorized:
+        if color_type=='random':
+            rgb = (
+                random.randint(0,255),
+                random.randint(0,255),
+                random.randint(0,255)
+            )
+        elif color_type=='sample':
+            rgb = random.choice(['black','white','green','red','yellow','orange','cyan'])
+        elif color_type=='average':
+            patch = image.crop((patch_left, patch_top, patch_right, patch_bottom))
+            imarray = np.array(patch)
+            color = imarray.mean(axis=(0,1))
+            rgb = (int(color[0]), int(color[1]), int(color[2]))
+        cropped_patch = Image.new('RGBA', (patch_w, patch_h), color=rgb)
+    else:
+        cropped_patch = image.crop((patch_left, patch_top, patch_right, patch_bottom))
 
-    cropped_patch = image.crop((patch_left, patch_top, patch_right, patch_bottom))
-    if augs:
+    if augs and colorized==False:
         cropped_patch = augs(cropped_patch)
     return cropped_patch
-
-
-def generate_swirl(
-        image,
-        center:tuple,
-        swirl_strength:tuple=(2,5),
-        swirl_radius:tuple=(50,100)):
-    img_arr = np.array(image)
-    
-    if swirl_radius[1] > image.size[0]:
-        swirl_radius = (int(image.size[0]/4), int(image.size[0]/2))
-    r = random.randint(swirl_radius[0], swirl_radius[1])
-
-    warped = swirl(
-        img_arr, 
-        center=center,
-        rotation=0, 
-        strength=random.randint(
-            swirl_strength[0],
-            swirl_strength[1]), 
-        radius=r)
-    warped = np.array(warped*255, dtype=np.uint8)
-    warped = Image.fromarray(warped, image.mode)
-    return warped
 
 
 def generate_scar(
@@ -158,7 +245,8 @@ def generate_scar(
         h_range:tuple=(10,25),  
         with_padding:bool=False,
         colorized:bool=False,
-        augs=None):
+        augs=None,
+        color_type='random'):
     img_w, img_h = image.size
     right = 1
     left = 1
@@ -173,18 +261,26 @@ def generate_scar(
     
     
     if colorized:
-        #r = random.randint(30,220)
-        #g = random.randint(30,220)
-        #b = random.randint(30,220)
-        #color = (r,g,b)
-        color = random.choice(['green','red','yellow','blue','orange','cyan','purple'])
-        scar = Image.new('RGBA', (scar_w, scar_h), color=color)
+        if color_type=='random':
+            rgb = (
+                random.randint(30,225),
+                random.randint(30,225),
+                random.randint(30,225)
+            )
+        elif color_type=='sample':
+            rgb = random.choice(['green','red','yellow','blue','orange','cyan','purple'])
+        elif color_type=='average':
+            scar = image.crop((patch_left, patch_top, patch_right, patch_bottom))
+            imarray = np.array(scar)
+            color = imarray.mean(axis=(0,1))
+            rgb = (int(color[0]), int(color[1]), int(color[2]))
+        scar = Image.new('RGBA', (scar_w, scar_h), color=rgb)
     else:
         scar = image.crop((patch_left, patch_top, patch_right, patch_bottom))
         if augs:
             scar = augs(scar)
         if with_padding:
-            padding = Image.new(image.mode, (new_width, new_height), (255, 255, 255))
+            padding = Image.new(image.mode, (new_width, new_height), color='silver')
             padding.paste(scar, (left, top))
             scar = padding
         scar = scar.convert('RGBA')
@@ -194,9 +290,9 @@ def generate_scar(
 def get_random_coordinate(binary_mask):
     binary_mask = np.array(binary_mask.convert('1'))
     xy_coords = np.flip(np.column_stack(np.where(binary_mask == 1)), axis=1)
-    if xy_coords == []:
+    if len(xy_coords) == 0:
         return None
-    if len(xy_coords) == 1:
+    elif len(xy_coords) < 2:
         return xy_coords[0]
     idx = random.randint(0, len(xy_coords)-1)
     return xy_coords[idx]

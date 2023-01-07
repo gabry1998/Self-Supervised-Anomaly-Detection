@@ -1,30 +1,35 @@
-from self_supervised.datasets import *
-from self_supervised.model import SSLM, PeraNet, MetricTracker
+import shutil
+from self_supervised.datasets import GenerativeDatamodule
+from self_supervised.support import constants as CONST
+from self_supervised.model import PeraNet, MetricTracker
+from self_supervised.support.functional import get_all_subject_experiments
 from self_supervised.support.visualization import plot_history
-from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, ModelPruning
+from pytorch_lightning.callbacks import EarlyStopping
 from tqdm import tqdm
 import pytorch_lightning as pl
 import os
 import numpy as np
 import random
+import torch
 
 
-def get_trainer(stopping_threshold:float, epochs:int, min_epochs:int):
+def get_trainer(stopping_threshold:float, epochs:int, min_epochs:int, log_dir:str):
     cb = MetricTracker()
     early_stopping = EarlyStopping(
         monitor="val_accuracy",
         stopping_threshold=stopping_threshold,
         mode='max',
-        patience=5
+        patience=4
     )
     trainer = pl.Trainer(
+        default_root_dir=log_dir,
         callbacks= [cb, early_stopping],
         precision=16,
         benchmark=True,
         accelerator='auto', 
         devices=1, 
-        min_epochs=min_epochs,
         max_epochs=epochs,
+        min_epochs=min_epochs,
         check_val_every_n_epoch=1)
     return trainer, cb
 
@@ -55,6 +60,9 @@ def training_pipeline(
     if not os.path.exists(result_path):
         os.makedirs(result_path)
     
+    if os.path.exists(result_path+'logs/'):
+        shutil.rmtree(result_path+'logs/')
+    
     print('result dir:', result_path)
     print('checkpoint name:', checkpoint_name)
     print('polygoned:', polygoned)
@@ -66,47 +74,43 @@ def training_pipeline(
     
     print('>>> preparing datamodule')
     datamodule = GenerativeDatamodule(
+        subject,
         dataset_dir+subject+'/',
         imsize=imsize,
         batch_size=batch_size,
         train_val_split=train_val_split,
         seed=seed,
         duplication=True,
+        min_dataset_length=500,
         patch_localization=patch_localization,
         polygoned=polygoned,
         colorized_scar=colorized_scar
     )
     
     print('>>> setting up the model')
-    #pretext_model = SSLM(
-    #    num_epochs=projection_training_epochs, 
-    #    lr=projection_training_lr,
-    #    )
     pretext_model = PeraNet(
         latent_space_dims=[512,512,512,512,512,512,512,512,512],
-        num_classes=2, lr=0.03, num_epochs=30)
+        num_classes=3, lr=projection_training_lr, num_epochs=projection_training_epochs)
     pretext_model.freeze_net(['backbone'])
-    trainer, cb = get_trainer(0.95, projection_training_epochs, min_epochs=10)
-    print('>>> start training (training projection head)')
+    trainer, cb = get_trainer(0.95, projection_training_epochs, min_epochs=5, log_dir=result_path+'logs/')
+    print('>>> start training (LATENT SPACE)')
     trainer.fit(pretext_model, datamodule=datamodule)
     print('>>> training plot')
     plot_history(cb.log_metrics, result_path, mode='training')
-    trainer.save_checkpoint(result_path+checkpoint_name)
+    #trainer.save_checkpoint(result_path+checkpoint_name)
     
     print('>>> setting up the model (fine tune whole net)')
-    pretext_model:PeraNet = PeraNet.load_from_checkpoint(result_path+checkpoint_name)
-    pretext_model.lr = 0.001
+    #pretext_model:PeraNet = PeraNet.load_from_checkpoint(result_path+'best_model.ckpt')
     pretext_model.num_epochs = 20
-    pretext_model.unfreeze_net()
-    pretext_model.lr = fine_tune_lr
-    pretext_model.num_epochs = fine_tune_epochs
-    #pretext_model.unfreeze_layers(True)
-    trainer, cb = get_trainer(0.95, fine_tune_epochs, min_epochs=5)
-    print('>>> start training (fine tune whole net)') 
+    pretext_model.lr = 0.005
+    pretext_model.unfreeze()
+    trainer, cb = get_trainer(0.95, fine_tune_epochs, min_epochs=1, log_dir=result_path+'logs/')
+    print('>>> start training (WHOLE NET)') 
     trainer.fit(pretext_model, datamodule=datamodule)
     trainer.save_checkpoint(result_path+checkpoint_name)
     print('>>> training plot')
     plot_history(cb.log_metrics, result_path, mode='fine_tune')
+    trainer.save_checkpoint(result_path+checkpoint_name)
 
 
 def run(
@@ -150,23 +154,67 @@ def run(
         os.system('clear')
 
 
+def get_textures_names():
+    return np.array(['carpet','grid','leather','tile','wood'])
+
+def get_obj_names():
+    return np.array([
+        'bottle',
+        'cable',
+        'capsule',
+        'hazelnut',
+        'metal_nut',
+        'pill',
+        'screw',
+        'tile',
+        'toothbrush',
+        'transistor',
+        'zipper'
+    ])
+
+def obj_set_one():
+    return [
+        'bottle',
+        'cable',
+        'capsule',
+        'hazelnut',
+        'metal_nut']
+
+def obj_set_two():
+    return [
+        'pill',
+        'screw',
+        'toothbrush',
+        'transistor',
+        'zipper']
+
+def specials():
+    return [
+        'cable',
+        'capsule',
+        'pill',
+        'screw']
+
 if __name__ == "__main__":
 
     experiments = get_all_subject_experiments('dataset/')
+    textures = get_textures_names()
+    obj1 = obj_set_one()
+    obj2 = obj_set_two()
     run(
-        experiments_list=['carpet'],
+        experiments_list=['zipper'],
         dataset_dir='dataset/', 
-        root_outputs_dir='brutta_copia/computations/',
+        root_outputs_dir='brutta_brutta_copia/computations/',
         imsize=(256,256),
         polygoned=True,
         colorized_scar=True,
         patch_localization=False,
-        batch_size=96,
+        batch_size=32,
         train_val_split=0.2,
         seed=0,
         projection_training_lr=0.03,
         projection_training_epochs=30,
-        fine_tune_lr=0.001,
+        fine_tune_lr=0.01,
         fine_tune_epochs=20
     )
         

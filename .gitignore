@@ -7,6 +7,8 @@ __pycache__/
 *.so
 
 #project folders
+da non cancellare/
+appunti.txt
 mvtec/
 dataset/
 lightning_logs/
@@ -16,6 +18,7 @@ src/test.py
 best_model.ckpt
 memes/
 brutta_copia/
+brutta_brutta_copia/
 
 
 # Distribution / packaging

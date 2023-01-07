@@ -1,34 +1,25 @@
+import shutil
 from self_supervised.gradcam import GradCam
-from self_supervised.model import GDE, SSLM, PeraNet
-from self_supervised.datasets import *
+from self_supervised.model import GDE, PeraNet
+from self_supervised.datasets import MVTecDatamodule, GenerativeDatamodule
 from tqdm import tqdm
-import self_supervised.datasets as dt
 import self_supervised.support.constants as CONST
+from self_supervised.support.functional import \
+    get_all_subject_experiments, get_prediction_class, heatmap2mask, multiclass2binary, normalize
 import self_supervised.support.visualization as vis
 import self_supervised.metrics as mtr
 import time
 import random
 import numpy as np
+import torch
+import pytorch_lightning as pl
+import os
 
 class Tracker:
     def __init__(self) -> None:
         self.auc = -1
         self.aupro = -1
         self.auc_pixel = -1
-
-
-def do_inference(model, x):
-    if torch.cuda.is_available():
-        with torch.no_grad():
-            y_hat, embeddings = model(x.to('cuda'))
-    else:
-        with torch.no_grad():
-            y_hat, embeddings = model(x.to('cpu'))
-    y_hat = y_hat.to('cpu')
-    embeddings = embeddings.to('cpu')
-    y_hat = get_prediction_class(y_hat)
-    
-    return y_hat, embeddings
 
 
 def inference_pipeline(
@@ -44,6 +35,9 @@ def inference_pipeline(
         imsize:int=CONST.DEFAULT_IMSIZE(),
         tracker:Tracker=None):
     
+    if os.path.exists('lightning_logs/'):
+        shutil.rmtree('lightning_logs/')
+        
     np.random.seed(seed)
     random.seed(seed)
     print('root input directory:', root_inputs_dir)
@@ -62,6 +56,7 @@ def inference_pipeline(
     tester = pl.Trainer(accelerator='auto', devices=1)
     print('>>> Generating test dataset (artificial)')
     artificial = GenerativeDatamodule(
+        subject,
         dataset_dir+subject+'/',
         imsize=imsize,
         batch_size=batch_size,
@@ -111,8 +106,10 @@ def inference_pipeline(
     mvtec_test_scores = normalize(mvtec_test_scores)
     fpr, tpr, _ = mtr.compute_roc(mvtec_test_labels, mvtec_test_scores)
     auc_score = mtr.compute_auc(fpr, tpr)
-    test_y_hat = multiclass2binary(predictions_mvtec['y_hat'])
-    f_score = mtr.compute_f1(torch.tensor(mvtec_test_labels), test_y_hat)
+    #test_y_hat = multiclass2binary(predictions_mvtec['y_hat'])
+    #f_score = mtr.compute_f1(torch.tensor(mvtec_test_labels), test_y_hat)
+    test_y_hat = predictions_mvtec['y_hat']
+    f_score = mtr.compute_f1(torch.tensor(mvtec_test_labels), multiclass2binary(test_y_hat))
     
     print('>>> compute PRO')
     x_mvtec = predictions_mvtec['x_prime']
@@ -124,8 +121,6 @@ def inference_pipeline(
         if predicted_class == 0:
             saliency_map = torch.zeros((256,256))[None, :]
         else:
-            if predicted_class > 1:
-                predicted_class = 1
             x = x_mvtec[i]
             saliency_map = gradcam(x[None, :], test_y_hat[i])
         anomaly_maps.append(np.array(saliency_map.squeeze()))
@@ -156,7 +151,8 @@ def inference_pipeline(
             total_embeddings, 
             total_y, 
             saving_path=outputs_dir, 
-            title='Embeddings projection for '+subject.upper()+' ['+str(seed)+']')
+            title='Embeddings projection for '+subject.upper()+' ['+str(seed)+']',
+            num_classes=3)
     
     if (au_pro > tracker.aupro): 
         print('>>> plot PRO..')
@@ -176,7 +172,7 @@ def inference_pipeline(
     flat_gt_labels = gt_mvtec.flatten(0, -1)
     fpr, tpr, _ = mtr.compute_roc(flat_gt_labels, flat_anomaly_maps)
     pixel_auc_score = mtr.compute_auc(fpr, tpr)
-    pixel_f_score = mtr.compute_f1(flat_gt_labels, torch.tensor(heatmap2mask(flat_anomaly_maps)))
+    pixel_f_score = 0
     end = time.time() - start
     print('Done in '+str(end)+ 'sec')
     
@@ -270,25 +266,44 @@ def run(
     metric_dict['AUC (pixel)'] = np.append(
         pixel_auc_scores, 
         np.mean(pixel_auc_scores))
-    metric_dict['F1 (pixel)'] = np.append(
-        pixel_f1_scores, 
-        np.mean(pixel_f1_scores))
     metric_dict['AUPRO'] = np.append(
         aupro_scores, 
         np.mean(aupro_scores))
     
     report = mtr.metrics_to_dataframe(metric_dict, np.array(experiments_list))
-    mtr.export_dataframe(report, saving_path=root_outputs_dir, name='polygon_patch_colored_scar.csv')
-    
+    mtr.export_dataframe(report, saving_path=root_outputs_dir, name='scores.csv')
+
+
+def get_textures_names():
+    return ['carpet','grid','leather','tile','wood']
+
+def obj_set_one():
+    return [
+        'bottle',
+        'cable',
+        'capsule',
+        'hazelnut',
+        'metal_nut']
+
+def obj_set_two():
+    return [
+        'pill',
+        'screw',
+        'toothbrush',
+        'transistor',
+        'zipper']
     
 if __name__ == "__main__":
     
     experiments = get_all_subject_experiments('dataset/')
+    textures = get_textures_names()
+    obj1 = obj_set_one()
+    obj2 = obj_set_two()
     run(
-        experiments_list=['bottle','carpet','hazelnut','leather','wood'],
+        experiments_list=experiments,
         dataset_dir='dataset/',
-        root_inputs_dir='brutta_copia/computations/',
-        root_outputs_dir='brutta_copia/computations/',
+        root_inputs_dir='brutta_brutta_copia/computations/',
+        root_outputs_dir='brutta_brutta_copia/computations/',
         num_experiments_for_each_subject=3,
         seed_list=[
             204110176,
