@@ -58,8 +58,11 @@ class Localizer:
         if torch.cuda.is_available():
             self.model.to('cuda')
         sample_imgs = 1
+        if sample_imgs > len(self.mvtec.train_dataloader().dataset.images_filenames):
+            sample_imgs = len(self.mvtec.train_dataloader().dataset.images_filenames)
         tot_embeddings = []
-        for i in range(sample_imgs):
+        pbar = tqdm(range(sample_imgs), desc='train data')
+        for i in pbar:
             x, _, _ = self.mvtec.train_dataloader().dataset.__getitem__(i)
             x_patches = extract_patches(x.unsqueeze(0), self.patch_dim, self.stride)
             if torch.cuda.is_available():
@@ -72,8 +75,8 @@ class Localizer:
             tot_embeddings.append(patches_embeddings.to('cpu')[None, :])
         tot_embeddings = torch.cat(tot_embeddings, dim=0)
         a,b,c = tot_embeddings.shape
-        tot_embeddings = torch.reshape(tot_embeddings, (a*b, c))
-        return tot_embeddings
+        tot_embeddings_reshaped = torch.reshape(tot_embeddings, (a*b, c))
+        return tot_embeddings_reshaped, tot_embeddings
     
     
     def setup_model(self):
@@ -90,7 +93,8 @@ class Localizer:
                 self.model.to('cuda')
             print('preparing kde train data')
             self.kde = md.MahalanobisDistance()
-            self.kde.fit(self._get_kde_embeddings())
+            a, b = self._get_kde_embeddings()
+            self.kde.fit(a)
             
         
     def setup_dataset(self, imsize:tuple=(256,256)):
@@ -124,7 +128,11 @@ class Localizer:
                 with torch.no_grad():
                     outputs = self.model(patches)
                 embeddings = outputs['latent_space'].to('cpu')
+                #self.kde = md.MahalanobisDistance()
+                #embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
+                #self.kde.fit(embeddings)
                 anomaly_scores = self.kde.predict(embeddings)
+                #anomaly_scores = md.cal_mahal_dist(embeddings)
                 anomaly_scores = normalize(anomaly_scores)
                 dim = int(np.sqrt(embeddings.shape[0]))
                 saliency_map = torch.reshape(anomaly_scores, (dim, dim))
@@ -186,7 +194,7 @@ def obj_set_two():
 
 if __name__ == "__main__":
     dataset_dir='dataset/'
-    root_inputs_dir='outputs/computations/'
+    root_inputs_dir='brutta_brutta_copia/computations/'
     root_outputs_dir='outputs/localization/'
     num_images=3,
     imsize=(256,256),
@@ -198,7 +206,7 @@ if __name__ == "__main__":
     obj1 = obj_set_one()
     obj2 = obj_set_two()
     
-    experiments_list = experiments
+    experiments_list = obj1+obj2
     pbar = tqdm(range(len(experiments_list)), position=0, leave=False)
     for i in pbar:
         pbar.set_description('Localization pipeline | current subject is '+experiments_list[i].upper())
@@ -208,7 +216,7 @@ if __name__ == "__main__":
             root_output_dir=root_outputs_dir,
             subject=experiments_list[i],
             model_name='best_model.ckpt',
-            patch_localization=False,
+            patch_localization=True,
             seed=0
         )
         localizer.setup_model()

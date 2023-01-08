@@ -2,6 +2,7 @@ from sklearn.covariance import LedoitWolf
 from sklearn.neighbors import KernelDensity
 from torch import nn
 from torchsummary import summary as torch_summary
+from numpy import linalg as LA
 import torch
 from torchvision import models
 import pytorch_lightning as pl
@@ -48,10 +49,11 @@ class PeraNet(pl.LightningModule):
     
     def setup_latent_space(self, dims:list) -> nn.Sequential:
         proj_layers = []
-        for d in dims[:-1]:
-            layer = nn.Linear(d,d, bias=False)
+        for i in range(len(dims[:-1])-1):
+            layer = nn.Linear(dims[i], dims[i+1], bias=False)
             proj_layers.append(layer),
-            proj_layers.append((nn.BatchNorm1d(d))),
+            proj_layers.append(nn.Dropout(0.25))
+            proj_layers.append((nn.BatchNorm1d(dims[i+1]))),
             proj_layers.append(nn.ReLU(inplace=True))
         embeds = nn.Linear(dims[-2], dims[-1], bias=True)
         proj_layers.append(embeds)
@@ -271,7 +273,7 @@ class MahalanobisDistance(object):
     def predict(self, embeddings:Tensor):
         distances = self.mahalanobis_distance(embeddings, self.mean, self.inv_cov)
         return distances
-
+    
     @staticmethod
     def mahalanobis_distance(
         values: torch.Tensor, mean: torch.Tensor, inv_covariance: torch.Tensor
@@ -290,4 +292,25 @@ class MahalanobisDistance(object):
         dist = torch.einsum("im,mn,in->i", x_mu, inv_covariance, x_mu)
         #m = torch.dot(x_mu, torch.matmul(torch.inverse(inv_covariance), x_mu))
         return dist.sqrt()
+
+
+def cal_mahal_dist(matrix):
+    matrix_center = np.mean(np.array(matrix), axis=0)
+    delta = matrix - matrix_center
+    
+    # calculate the covariance matrix and its inverse matrix
+    cov_matrix = np.cov(matrix, rowvar=False, ddof=1)
+    cov_matrix_inv = LA.inv(cov_matrix)  
+    
+    # calculate the Mahalanobis distance between a single vector and the center of the dataset
+    def md_vector(vector):        
+        inner_prod = np.dot(vector, cov_matrix_inv)
+        dist = np.sqrt(np.dot(inner_prod, vector))
+        return dist
+
+    mahal_dist = np.apply_along_axis(arr=delta, axis=1, func1d=md_vector)
+    assert len(mahal_dist) == len(matrix)
+    return torch.tensor(mahal_dist)
+
+    
     

@@ -214,15 +214,13 @@ class PeraDataset(Dataset):
                             cutting,
                             area_ratio=[0.02, 0.05],
                             aspect_ratio=self.aspect_ratio,
-                            augs=CPP.jitter_transforms,
-                            colorized=False)
+                            augs=CPP.jitter_transforms)
                 else:
                     patch = generate_patch(
                             original,
                             area_ratio=[0.02, 0.09],
                             aspect_ratio=self.aspect_ratio,
-                            augs=CPP.jitter_transforms,
-                            colorized=False) 
+                            augs=CPP.jitter_transforms) 
                 coords, _ = check_valid_coordinates_by_container(
                         x.size, 
                         patch.size, 
@@ -234,7 +232,6 @@ class PeraDataset(Dataset):
                 x = paste_patch(x, patch, coords, mask) 
             # small defect (scar)
             else:
-                
                 if self.subject in np.array(['carpet','grid','leather','tile','wood']):
                     random_subject = random.choice(self.classes)
                     cutting = Image.open(
@@ -245,7 +242,6 @@ class PeraDataset(Dataset):
                         self.scar_width,
                         self.scar_thiccness,
                         colorized=False,
-                        augs=CPP.jitter_transforms,
                         color_type='average' # random, average, sample
                     )
                 else:
@@ -262,6 +258,7 @@ class PeraDataset(Dataset):
                         current_coords=coords,
                         container_scaling_factor=container_scaling_factor_patch
                     )
+                scar = scar.filter(ImageFilter.SHARPEN)
                 angle = random.randint(-45,45)
                 scar = scar.rotate(angle, expand=True)
                 x = paste_patch(x, scar, coords, scar)

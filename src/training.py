@@ -89,7 +89,7 @@ def training_pipeline(
     
     print('>>> setting up the model')
     pretext_model = PeraNet(
-        latent_space_dims=[512,512,512,512,512,512,512,512,512],
+        latent_space_dims=[512,256,128,256,512],
         num_classes=3, lr=projection_training_lr, num_epochs=projection_training_epochs)
     pretext_model.freeze_net(['backbone'])
     trainer, cb = get_trainer(0.95, projection_training_epochs, min_epochs=5, log_dir=result_path+'logs/')
@@ -202,9 +202,9 @@ if __name__ == "__main__":
     obj1 = obj_set_one()
     obj2 = obj_set_two()
     run(
-        experiments_list=['zipper'],
+        experiments_list=obj1+obj2,
         dataset_dir='dataset/', 
-        root_outputs_dir='brutta_brutta_copia/computations/',
+        root_outputs_dir='brutta_copia/computations/',
         imsize=(256,256),
         polygoned=True,
         colorized_scar=True,
