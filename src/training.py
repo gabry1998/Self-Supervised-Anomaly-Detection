@@ -19,7 +19,7 @@ def get_trainer(stopping_threshold:float, epochs:int, min_epochs:int, log_dir:st
         monitor="val_accuracy",
         stopping_threshold=stopping_threshold,
         mode='max',
-        patience=4
+        patience=3
     )
     trainer = pl.Trainer(
         default_root_dir=log_dir,
@@ -81,18 +81,19 @@ def training_pipeline(
         train_val_split=train_val_split,
         seed=seed,
         duplication=True,
-        min_dataset_length=500,
+        min_dataset_length=1000,
         patch_localization=patch_localization,
         polygoned=polygoned,
-        colorized_scar=colorized_scar
+        colorized_scar=colorized_scar,
+        patch_size=32
     )
-    
-    print('>>> setting up the model')
     pretext_model = PeraNet(
-        latent_space_dims=[512,256,128,256,512],
+        latent_space_dims=[512,512,512,512,512],
+        #latent_space_dims=[512,512,512,512,512,512,512,512,512],
         num_classes=3, lr=projection_training_lr, num_epochs=projection_training_epochs)
     pretext_model.freeze_net(['backbone'])
-    trainer, cb = get_trainer(0.95, projection_training_epochs, min_epochs=5, log_dir=result_path+'logs/')
+    trainer, cb = get_trainer(0.8, projection_training_epochs, min_epochs=5, log_dir=result_path+'logs/')
+    pretext_model.num_training_batches = trainer.num_training_batches
     print('>>> start training (LATENT SPACE)')
     trainer.fit(pretext_model, datamodule=datamodule)
     print('>>> training plot')
@@ -102,9 +103,9 @@ def training_pipeline(
     print('>>> setting up the model (fine tune whole net)')
     #pretext_model:PeraNet = PeraNet.load_from_checkpoint(result_path+'best_model.ckpt')
     pretext_model.num_epochs = 20
-    pretext_model.lr = 0.005
+    pretext_model.lr = 0.01
     pretext_model.unfreeze()
-    trainer, cb = get_trainer(0.95, fine_tune_epochs, min_epochs=1, log_dir=result_path+'logs/')
+    trainer, cb = get_trainer(0.98, fine_tune_epochs, min_epochs=5, log_dir=result_path+'logs/')
     print('>>> start training (WHOLE NET)') 
     trainer.fit(pretext_model, datamodule=datamodule)
     trainer.save_checkpoint(result_path+checkpoint_name)
@@ -202,13 +203,13 @@ if __name__ == "__main__":
     obj1 = obj_set_one()
     obj2 = obj_set_two()
     run(
-        experiments_list=obj1+obj2,
+        experiments_list=['bottle'],
         dataset_dir='dataset/', 
-        root_outputs_dir='brutta_copia/computations/',
+        root_outputs_dir='brutta_brutta_copia/computations/',
         imsize=(256,256),
         polygoned=True,
         colorized_scar=True,
-        patch_localization=False,
+        patch_localization=True,
         batch_size=32,
         train_val_split=0.2,
         seed=0,

@@ -1,5 +1,7 @@
+import random
 from sklearn.covariance import LedoitWolf
-from sklearn.neighbors import KernelDensity
+from sklearn.neighbors import KernelDensity, NearestNeighbors
+from sklearn.metrics.pairwise import cosine_similarity
 from torch import nn
 from torchsummary import summary as torch_summary
 from numpy import linalg as LA
@@ -10,17 +12,19 @@ import torch.nn.functional as F
 from torchmetrics.functional import accuracy
 import numpy as np
 from torch import Tensor
-from self_supervised.support.functional import get_prediction_class, gt2label
+from self_supervised.support.functional import get_prediction_class, gt2label, normalize
 
 
 class PeraNet(pl.LightningModule):
     def __init__(
             self, 
-            latent_space_dims:list=[512,512,512,512,512,512,512,512,512,512,512],
+            #latent_space_dims:list=[512,512,512,512,512,512,512,512,512],
+            latent_space_dims:list=[512,512,512,512,512],
             backbone:str='resnet18',
             lr:float=0.01,
             num_epochs:int=20,
-            num_classes:int=3) -> None:
+            num_classes:int=3,
+            memory_bank_dim:int=500) -> None:
         super(PeraNet, self).__init__()
         self.save_hyperparameters()
         self.lr = lr
@@ -28,6 +32,8 @@ class PeraNet(pl.LightningModule):
         self.backbone = backbone
         self.latent_space_dims = latent_space_dims
         
+        self.memory_bank_dim = memory_bank_dim
+        self.memory_bank = torch.tensor([])
         
         self.feature_extractor = self.setup_backbone(backbone)
         self.latent_space = self.setup_latent_space(latent_space_dims)
@@ -38,24 +44,29 @@ class PeraNet(pl.LightningModule):
     
     def summary(self):
         torch_summary(self.to('cpu'), (3,256,256), device='cpu')
-        
+    
+    
     def setup_backbone(self, backbone:str) -> nn.Sequential:
         if backbone == 'resnet18':
-            model = models.resnet18(weights="IMAGENET1K_V1")
-        layers = list(model.children())[:-1]
-        feature_extractor = nn.Sequential(*layers)
+            feature_extractor = models.resnet18(weights="IMAGENET1K_V1")
+            last_layer= list(feature_extractor.named_modules())[-1][0].split('.')[0]
+            setattr(feature_extractor, last_layer, nn.Identity())
         return feature_extractor
     
     
     def setup_latent_space(self, dims:list) -> nn.Sequential:
         proj_layers = []
-        for i in range(len(dims[:-1])-1):
-            layer = nn.Linear(dims[i], dims[i+1], bias=False)
-            proj_layers.append(layer),
-            proj_layers.append(nn.Dropout(0.25))
-            proj_layers.append((nn.BatchNorm1d(dims[i+1]))),
-            proj_layers.append(nn.ReLU(inplace=True))
-        embeds = nn.Linear(dims[-2], dims[-1], bias=True)
+        if len(dims) > 1:
+            for i in range(len(dims)-1):
+                inp = dims[i]
+                out = dims[i+1]
+                layer = nn.Linear(inp, out, bias=False)
+                proj_layers.append(layer)
+                proj_layers.append(nn.BatchNorm1d(dims[i]))
+                proj_layers.append(nn.ReLU(inplace=True))
+            embeds = nn.Linear(dims[-2], dims[-1], bias=True)
+        else:
+            embeds = nn.Linear(dims[0], dims[0], bias=True)
         proj_layers.append(embeds)
         projection_head = nn.Sequential(
             *proj_layers
@@ -75,6 +86,7 @@ class PeraNet(pl.LightningModule):
 
     def unfreeze_net(self, modules:list=['backbone', 'latent_space']):
         if 'backbone' in modules:
+            print('uh')
             for param in self.feature_extractor.parameters():
                 param.requires_grad = True
         if 'latent_space' in modules:
@@ -112,7 +124,29 @@ class PeraNet(pl.LightningModule):
             return l3
         if layer=='layer4':
             return l4
-        
+    
+    
+    def on_save_checkpoint(self, checkpoint) -> None:
+        checkpoint['memory_bank'] = self.memory_bank
+
+    
+    def on_load_checkpoint(self, checkpoint) -> None:
+        self.memory_bank = checkpoint['memory_bank']
+    
+    
+    def on_train_epoch_end(self) -> None:
+        data = self.current_batch[0].to('cpu')
+        y_hat = get_prediction_class(self.current_batch[1].to('cpu'))
+        y_true = self.current_batch[2].to('cpu')
+        batch = torch.tensor([])
+        for i in range(len(data)):
+            if y_hat[i] == 0 and y_true[i] == 0:
+                batch = torch.cat([batch, data[i][None, :]])
+        self.memory_bank = torch.cat((self.memory_bank, batch))
+        if len(self.memory_bank) > self.memory_bank_dim:
+            items_to_remove = len(self.memory_bank) - self.memory_bank_dim
+            self.memory_bank = self.memory_bank[items_to_remove:]
+            
         
     def forward(self, x):
         output = {}
@@ -121,13 +155,14 @@ class PeraNet(pl.LightningModule):
         features = torch.flatten(features, 1)
         embeddings = self.latent_space(features)
         y_hat = self.classifier(embeddings)
-        
         output['classifier'] = y_hat
+        #output['latent_space'] = torch.cat([embeddings, features], dim=1)
         output['latent_space'] = embeddings
         return output
     
     
     def training_step(self, batch, batch_idx):
+        random_idx = random.randint(0, self.trainer.num_training_batches-1)
         x, y, _ = batch
         
         outputs = self(x)
@@ -140,6 +175,8 @@ class PeraNet(pl.LightningModule):
                       on_step=False,
                       on_epoch=True,
                       prog_bar=True)
+        if batch_idx == random_idx:
+            self.current_batch = (outputs['latent_space'], outputs['classifier'], y)
         return loss
 
     
@@ -269,7 +306,6 @@ class MahalanobisDistance(object):
     def fit(self, embeddings:Tensor):
         self.mean = torch.mean(embeddings, axis=0)
         self.inv_cov = torch.Tensor(LedoitWolf().fit(embeddings.cpu()).precision_,device="cpu")
-
     def predict(self, embeddings:Tensor):
         distances = self.mahalanobis_distance(embeddings, self.mean, self.inv_cov)
         return distances
@@ -294,23 +330,45 @@ class MahalanobisDistance(object):
         return dist.sqrt()
 
 
-def cal_mahal_dist(matrix):
-    matrix_center = np.mean(np.array(matrix), axis=0)
-    delta = matrix - matrix_center
+class CosineEstimator:
+    def __init__(self) -> None:
+        pass
     
-    # calculate the covariance matrix and its inverse matrix
-    cov_matrix = np.cov(matrix, rowvar=False, ddof=1)
-    cov_matrix_inv = LA.inv(cov_matrix)  
+    def fit(self, embedding:Tensor):
+        mean = torch.mean(embedding, axis=0)
+        self.mean = np.array(mean[None, :])
     
-    # calculate the Mahalanobis distance between a single vector and the center of the dataset
-    def md_vector(vector):        
-        inner_prod = np.dot(vector, cov_matrix_inv)
-        dist = np.sqrt(np.dot(inner_prod, vector))
-        return dist
+    def predict(self, x:Tensor):
+        def calculate_cosine(vector):
+            vector = np.array(vector[None, :])
+            out = 1-cosine_similarity(self.mean, vector)
+            if out < 0.:
+                return 0.
+            if out > 1.:
+                return 1.
+            return out
+        
+        anomaly_scores = np.apply_along_axis(arr=x, axis=1, func1d=calculate_cosine)
+        anomaly_scores = torch.tensor(anomaly_scores)
+        return anomaly_scores
 
-    mahal_dist = np.apply_along_axis(arr=delta, axis=1, func1d=md_vector)
-    assert len(mahal_dist) == len(matrix)
-    return torch.tensor(mahal_dist)
+
+class AnomalyDetector:
+    def __init__(self) -> None:
+        pass
+    
+    def fit(self, embeddings:Tensor):
+        self.nbrs:NearestNeighbors = NearestNeighbors(
+            n_neighbors=1, algorithm='auto', metric='cosine').fit(embeddings)
+
+    def predict(self, x:Tensor):
+        anomaly_scores = self.nbrs.kneighbors(x)[0].squeeze()
+        anomaly_scores = torch.tensor(anomaly_scores)
+        anomaly_scores[anomaly_scores > 1.] = 1.
+        anomaly_scores[anomaly_scores < 0.1] = 0.
+        return anomaly_scores
+    
+    
 
     
     

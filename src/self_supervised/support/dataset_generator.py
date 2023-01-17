@@ -1,10 +1,11 @@
 import random
 from PIL import Image,ImageDraw, ImageFilter
 import numpy as np
-from .functional import normalize_in_interval
-from scipy.spatial import ConvexHull
-from skimage.transform import swirl
 from skimage.morphology import square, label
+from sklearn.metrics.pairwise import cosine_similarity
+from skimage.segmentation import slic
+from skimage.measure import regionprops
+from skimage import color
 from skimage import feature
 from scipy import ndimage
 from scipy.ndimage import binary_dilation, binary_erosion, binary_closing
@@ -24,48 +25,11 @@ class Container:
         self.height = self.bottom - self.top
 
 
-
-def apply_wrinkle(img, wrinkles):
-    img = np.array(img).astype("float32") / 255.0
-    wrinkles = np.array(wrinkles.convert('L')).astype("float32") / 255.0
-    # apply linear transform to stretch wrinkles to make shading darker
-    # C = A*x+B
-    # x=1 -> 1; x=0.25 -> 0
-    # 1 = A + B
-    # 0 = 0.25*A + B
-    # Solve simultaneous equations to get:
-    # A = 1.33
-    # B = -0.33
-    wrinkles = 1.33 * wrinkles -0.33
-
-    # threshold wrinkles and invert
-    thresh = cv2.threshold(wrinkles,0.5,1,cv2.THRESH_BINARY)[1]
-    thresh = cv2.cvtColor(thresh,cv2.COLOR_GRAY2BGR) 
-    thresh_inv = 1-thresh
-
-    # shift image brightness so mean is mid gray
-    mean = np.mean(wrinkles)
-    shift = mean - 0.5
-    wrinkles = cv2.subtract(wrinkles, shift)
-
-    # convert wrinkles from grayscale to rgb
-    wrinkles = cv2.cvtColor(wrinkles,cv2.COLOR_GRAY2BGR) 
-
-    # do hard light composite and convert to uint8 in range 0 to 255
-    # see CSS specs at https://www.w3.org/TR/compositing-1/#blendinghardlight
-    low = 2.0 * img * wrinkles
-    high = 1 - 2.0 * (1-img) * (1-wrinkles)
-    result = ( 255 * (low * thresh_inv + high * thresh) ).clip(0, 255).astype(np.uint8)
-    return Image.fromarray(result).convert('RGB')
-
-
-def generate_wrinkle(patch):
-    wrinkle = Image.open('wrinkled.png').convert('RGBA')
-    wrinkle_left = random.randint(0, wrinkle.size[0] - patch.width) 
-    wrinkle_top = random.randint(0, wrinkle.size[1] - patch.height)
-    wrinkle_right, wrinkle_bottom = wrinkle_left + patch.width, wrinkle_top + patch.height
-    wrinkle = wrinkle.crop((wrinkle_left, wrinkle_top, wrinkle_right, wrinkle_bottom))
-    return wrinkle
+def get_superpixels(image, segm):
+    image_array = np.array(image)
+    segments = slic(image_array, n_segments = segm, sigma = 5, convert2lab=True)
+    superpixels = color.label2rgb(segments, image_array, kind='avg')
+    return superpixels
 
 
 def obj_mask(image):
@@ -83,22 +47,9 @@ def obj_mask(image):
     return Image.fromarray(edged_image).convert('RGB')
 
 
-def polygonize(patch, min_points:int=5, max_points:int=15):
-    mask = Image.new('RGBA', (patch.size), (0,0,0,0)) 
-    draw = ImageDraw.Draw(mask)
-    
-    points = get_random_points(
-        mask.size[0],
-        mask.size[1],
-        min_points,
-        max_points)
-    draw.polygon(points, fill='white')
-    return mask
-
-
 def rect2poly(patch, regular:bool=False, sides:list=4):
     width, height = patch.size
-    mask = Image.new('RGBA', (patch.size), (0,0,0,0)) 
+    mask = Image.new('RGBA', (patch.size), color=(0,0,0,0))
     draw = ImageDraw.Draw(mask)
     if regular:
         max_val = int(min([width, height])/2)
@@ -163,9 +114,9 @@ def check_valid_coordinates_by_container(
         patchsize:tuple,
         current_coords:tuple=None,
         container_scaling_factor:int=1):
-    patch_w, patch_h = patchsize
+    defect_width, defect_height = patchsize
     container = Container(imsize, scaling_factor=container_scaling_factor)
-    # coordinate
+    # no coords? generate brand new
     if current_coords is None:
         center_x = random.randint(container.left, container.right)
         center_y = random.randint(container.top, container.bottom)
@@ -173,29 +124,47 @@ def check_valid_coordinates_by_container(
         center_x = current_coords[0]
         center_y = current_coords[1]
 
+    # we have (x, y); PIL paste() requires (left, top)
     paste_left = center_x - int(patchsize[0]/2)
     paste_top = center_y - int(patchsize[1]/2)
+    paste_right = center_x + int(patchsize[0]/2)
+    paste_bottom = center_y + int(patchsize[1]/2)
     
+    # check defect bounding box (left, top, right, bottom) is in container, and update (left, top)
+    
+    #right point
+    if paste_right > container.right:
+        paste_left = container.right - defect_width
+        center_x = paste_right - int(defect_width/2)
+    #bottom point
+    if paste_bottom > container.bottom:
+        paste_top = container.bottom - defect_height
+        center_y = paste_bottom - int(defect_height/2)
+    # left point
     if paste_left < container.left:
-        center_x = container.left
-        paste_left = center_x - int(patchsize[0]/2)
-        if paste_left < 0:
-            paste_left = 0
-            center_x = int(patch_w/2)
-    if paste_left > container.right:
-        center_x = container.right
-        paste_left = center_x - int(patchsize[0]/2)
-    if paste_top < container.top: 
-        center_y = container.top
-        paste_top = center_y - int(patchsize[1]/2)
-        if paste_top < 0:
-            paste_top = 0
-            center_y = int(patch_h/2)
-    if paste_top > container.bottom:
-        center_y = container.bottom
-        paste_top = center_y - int(patchsize[1]/2)
+        paste_left = container.left
+        center_x = container.left + int(defect_width/2)
+    # top point
+    if paste_top < container.top:
+        paste_top = container.top
+        center_y = container.top + int(defect_height/2)
+        
     return (paste_left, paste_top), (center_x, center_y)
 
+
+def check_patch_and_defect_similarity(patch, defect):
+    imarray = np.array(patch)
+    color = imarray.mean(axis=(0,1))
+    rgb1 = (float(color[0]/255), float(color[1]/255), float(color[2]/255))
+    
+    imarray = np.array(defect)
+    color = imarray.mean(axis=(0,1))
+    rgb2 = (float(color[0]/255), float(color[1]/255), float(color[2]/255))
+    
+    v1 = np.array(rgb1)[None, :]
+    v2 = np.array(rgb2)[None, :]
+    out = cosine_similarity(v1, v2)
+    return out.squeeze()
    
 def generate_patch(
         image, 
@@ -224,13 +193,13 @@ def generate_patch(
                 random.randint(0,255)
             )
         elif color_type=='sample':
-            rgb = random.choice(['black','white','green','red','yellow','orange','cyan'])
+            rgb = random.choice(['black','white','silver', 'gray','orange'])
         elif color_type=='average':
             patch = image.crop((patch_left, patch_top, patch_right, patch_bottom))
             imarray = np.array(patch)
             color = imarray.mean(axis=(0,1))
             rgb = (int(color[0]), int(color[1]), int(color[2]))
-        cropped_patch = Image.new('RGBA', (patch_w, patch_h), color=rgb)
+        cropped_patch = Image.new('RGB', (patch_w, patch_h), color=rgb)
     else:
         cropped_patch = image.crop((patch_left, patch_top, patch_right, patch_bottom))
 
@@ -287,27 +256,13 @@ def generate_scar(
     return scar
 
 
-def get_random_coordinate(binary_mask):
-    binary_mask = np.array(binary_mask.convert('1'))
-    xy_coords = np.flip(np.column_stack(np.where(binary_mask == 1)), axis=1)
+def get_random_coordinate(xy_coords):
     if len(xy_coords) == 0:
         return None
     elif len(xy_coords) < 2:
         return xy_coords[0]
     idx = random.randint(0, len(xy_coords)-1)
     return xy_coords[idx]
-
-
-def get_random_points(width, height,min_num_points=3, max_num_points=4):
-    raw_points = 0.1 + 0.8*np.random.rand(random.randint(min_num_points,max_num_points), 2)
-    ch = ConvexHull(raw_points)
-    hull_indices = ch.vertices
-    points = raw_points[hull_indices, :]
-    x = [points[i][0] for i in range(len(points))]
-    y = [points[i][1] for i in range(len(points))]
-    x1 = normalize_in_interval(x, 0, width)
-    y1 = normalize_in_interval(y, 0, height)
-    return [(x1[i], y1[i]) for i in range(len(points))]
 
 
 def paste_patch(image, patch, coords, mask=None, center:tuple=None, debug:bool=False):

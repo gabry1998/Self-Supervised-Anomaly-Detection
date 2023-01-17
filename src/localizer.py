@@ -1,9 +1,13 @@
-from PIL import Image
+from PIL import Image, ImageFilter
 from tqdm import tqdm
 from self_supervised.gradcam import GradCam
 from torchvision import transforms
+from torchvision.transforms import functional
 from self_supervised.support.functional import *
 from self_supervised.support.visualization import *
+from skimage.segmentation import slic
+from skimage import color
+from sklearn.neighbors import NearestNeighbors
 import self_supervised.support.constants as CONST
 import self_supervised.datasets as dt
 import self_supervised.model as md
@@ -25,6 +29,7 @@ class Localizer:
             subject:str=None,
             model_name:str='best_model.ckpt',
             patch_localization=True,
+            imsize:tuple=(256,256),
             patch_dim:int=32,
             stride:int=4,
             seed=0,
@@ -39,6 +44,7 @@ class Localizer:
         self.outputs_dir = root_output_dir+subject+'/'+mode+'/gradcam/'
         
         self.model_name = model_name
+        self.imsize = imsize
         self.patch_localization = patch_localization
         self.patch_dim = patch_dim
         self.stride = stride
@@ -48,16 +54,16 @@ class Localizer:
         np.random.seed(seed)
         
         if dataset_dir:
-            self.setup_dataset()
+            self.setup_dataset(imsize=imsize)
     
     
-    def _get_kde_embeddings(self):
+    def _get_detector_good_embeddings(self, img:Tensor=None):
         model:md.PeraNet = md.PeraNet.load_from_checkpoint(self.model_dir+self.model_name)
         model.enable_mvtec_inference()
         model.eval()
         if torch.cuda.is_available():
             self.model.to('cuda')
-        sample_imgs = 1
+        sample_imgs = 2
         if sample_imgs > len(self.mvtec.train_dataloader().dataset.images_filenames):
             sample_imgs = len(self.mvtec.train_dataloader().dataset.images_filenames)
         tot_embeddings = []
@@ -71,12 +77,16 @@ class Localizer:
             else:
                 with torch.no_grad():
                     output = self.model(x_patches)
-            patches_embeddings = output['latent_space']
-            tot_embeddings.append(patches_embeddings.to('cpu')[None, :])
-        tot_embeddings = torch.cat(tot_embeddings, dim=0)
-        a,b,c = tot_embeddings.shape
-        tot_embeddings_reshaped = torch.reshape(tot_embeddings, (a*b, c))
-        return tot_embeddings_reshaped, tot_embeddings
+            patches_embeddings = output['latent_space'].to('cpu')
+            y_hats = get_prediction_class(output['classifier']).to('cpu')
+            for i in range(len(patches_embeddings)):
+                if y_hats[i] == 0:
+                    tot_embeddings.append(np.array(patches_embeddings[i]))
+            #tot_embeddings.append(patches_embeddings.to('cpu')[None, :])
+        tot_embeddings = torch.tensor(np.array(tot_embeddings))
+        #a,b,c = tot_embeddings.shape
+        #tot_embeddings_reshaped = torch.reshape(tot_embeddings, (a*b, c))
+        return tot_embeddings
     
     
     def setup_model(self):
@@ -91,10 +101,8 @@ class Localizer:
         else:
             if torch.cuda.is_available():
                 self.model.to('cuda')
-            print('preparing kde train data')
-            self.kde = md.MahalanobisDistance()
-            a, b = self._get_kde_embeddings()
-            self.kde.fit(a)
+            self.detector = md.AnomalyDetector()
+            self.detector.fit(self.model.memory_bank.detach())
             
         
     def setup_dataset(self, imsize:tuple=(256,256)):
@@ -111,14 +119,14 @@ class Localizer:
     def localize(self, num_images:int=10):
         print('starting localization')
         j = len(self.mvtec.test_dataset)-1
-        for i in tqdm(range(num_images), desc='images'):
+        for i in tqdm(range(num_images), desc='test images'):
             x_prime, gt, x = self.mvtec.test_dataset[random.randint(0, j)]
             if not self.patch_localization:
                 with torch.no_grad():
                     predictions = self.model(x_prime[None, :])
                 y_hat = get_prediction_class(predictions['classifier'].to('cpu'))
                 if y_hat == 0:
-                    saliency_map = torch.zeros((256,256))[None, :]
+                    saliency_map = torch.zeros(self.imsize)[None, :]
                 else:
                     saliency_map = self.gradcam(x_prime[None, :], y_hat)
             else: 
@@ -128,16 +136,14 @@ class Localizer:
                 with torch.no_grad():
                     outputs = self.model(patches)
                 embeddings = outputs['latent_space'].to('cpu')
-                #self.kde = md.MahalanobisDistance()
-                #embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
-                #self.kde.fit(embeddings)
-                anomaly_scores = self.kde.predict(embeddings)
-                #anomaly_scores = md.cal_mahal_dist(embeddings)
-                anomaly_scores = normalize(anomaly_scores)
+                anomaly_scores = self.detector.predict(embeddings)
                 dim = int(np.sqrt(embeddings.shape[0]))
                 saliency_map = torch.reshape(anomaly_scores, (dim, dim))
-                saliency_map = F.interpolate(saliency_map[None,None,:], 256, mode='bilinear')
-            heatmap = apply_heatmap(x[None, :], saliency_map)
+                ksize = 5
+                saliency_map = functional.gaussian_blur(saliency_map[None,:], kernel_size=ksize).squeeze()
+                saliency_map = F.relu(saliency_map)
+                saliency_map = F.interpolate(saliency_map[None,None,:], self.imsize[0], mode='bilinear').squeeze()
+            heatmap = apply_heatmap(x[None, :], saliency_map[None, :])
             image = imagetensor2array(x)
             gt = imagetensor2array(gt)
             plot_heatmap_and_masks(
@@ -194,19 +200,20 @@ def obj_set_two():
 
 if __name__ == "__main__":
     dataset_dir='dataset/'
-    root_inputs_dir='brutta_brutta_copia/computations/'
-    root_outputs_dir='outputs/localization/'
-    num_images=3,
-    imsize=(256,256),
-    seed=204110176,
-    patch_localization=False
+    root_inputs_dir='brutta_copia/computations/'
+    root_outputs_dir='brutta_copia/localization/'
+    imsize=(256,256)
+    patch_dim = 32
+    stride=8
+    seed=204110176
+    patch_localization=True
       
     experiments = get_all_subject_experiments('dataset/')
     textures = get_textures_names()
     obj1 = obj_set_one()
     obj2 = obj_set_two()
     
-    experiments_list = obj1+obj2
+    experiments_list = ['hazelnut']
     pbar = tqdm(range(len(experiments_list)), position=0, leave=False)
     for i in pbar:
         pbar.set_description('Localization pipeline | current subject is '+experiments_list[i].upper())
@@ -216,10 +223,13 @@ if __name__ == "__main__":
             root_output_dir=root_outputs_dir,
             subject=experiments_list[i],
             model_name='best_model.ckpt',
-            patch_localization=True,
-            seed=0
+            imsize=imsize,
+            patch_localization=patch_localization,
+            patch_dim=patch_dim,
+            stride=stride,
+            seed=seed
         )
         localizer.setup_model()
-        localizer.localize()
+        localizer.localize(num_images=20)
         os.system('clear')
         

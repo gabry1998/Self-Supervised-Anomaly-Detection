@@ -271,7 +271,7 @@ def run(
         np.mean(aupro_scores))
     
     report = mtr.metrics_to_dataframe(metric_dict, np.array(experiments_list))
-    mtr.export_dataframe(report, saving_path=root_outputs_dir, name='scores.csv')
+    mtr.export_dataframe(report, saving_path=root_outputs_dir, name='obj1.csv')
 
 
 def get_textures_names():
@@ -300,10 +300,10 @@ if __name__ == "__main__":
     obj1 = obj_set_one()
     obj2 = obj_set_two()
     run(
-        experiments_list=experiments,
+        experiments_list=obj1,
         dataset_dir='dataset/',
-        root_inputs_dir='brutta_brutta_copia/computations/',
-        root_outputs_dir='brutta_brutta_copia/computations/',
+        root_inputs_dir='brutta_copia/computations/',
+        root_outputs_dir='brutta_copia/computations/',
         num_experiments_for_each_subject=3,
         seed_list=[
             204110176,

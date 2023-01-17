@@ -1,8 +1,9 @@
 from sklearn.metrics import roc_curve, auc
 from torch import Tensor
 from sklearn.manifold import TSNE
-from PIL import Image
+from PIL import Image, ImageFilter
 from self_supervised.support.functional import imagetensor2array, normalize
+from torchvision import transforms
 import matplotlib.pyplot as plt
 import cv2
 import seaborn as sns

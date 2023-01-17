@@ -1,6 +1,8 @@
 import numpy as np
 import pytorch_lightning as pl
-from PIL import Image
+from PIL import Image, ImageOps
+from skimage.segmentation import slic
+from skimage import color
 from sklearn.model_selection import train_test_split as tts
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
@@ -42,7 +44,7 @@ class MVTecDataset(Dataset):
             x_hat = self.transform(x)
         gt = transforms.ToTensor()(gt)
         return x_hat, gt, transforms.ToTensor()(x)
-    
+        
     def __len__(self):
         return self.images_filenames.shape[0]
 
@@ -82,18 +84,21 @@ class MVTecDatamodule(pl.LightningDataModule):
             self.root_dir,
             self.subject,
             train_images_filenames,
+            imsize=self.imsize,
             transform=self.transform
         )
         self.val_dataset = MVTecDataset(
             self.root_dir,
             self.subject,
             val_images_filenames,
+            imsize=self.imsize,
             transform=self.transform
         )
         self.test_dataset = MVTecDataset(
             self.root_dir,
             self.subject,
             self.test_images_filenames,
+            imsize=self.imsize,
             transform=self.transform
         )
     
@@ -162,26 +167,41 @@ class PeraDataset(Dataset):
         all_classes = np.array(get_all_subject_experiments('dataset/'))
         idx = np.where(all_classes == self.subject)
         self.classes = np.delete(all_classes, idx)
-        self.fixed_segmentation = obj_mask(Image.open('dataset/'+self.subject+'/train/good/000.png').resize(imsize).convert('RGB'))
-
+        
+        # create a single mask for position-fixed object
+        # textures just have a white image
+        if self.subject in np.array(['carpet','grid','leather','tile','wood']):
+            self.fixed_segmentation = Image.new(size=imsize, mode='RGB', color='white')
+        else:
+            temp = Image.open('dataset/'+self.subject+'/train/good/000.png').resize(imsize).convert('RGB')
+            self.fixed_segmentation = obj_mask(temp)
+        
+        
     def __getitem__(self, index):
         # load image
         original = Image.open(
-            self.images_filenames[index]).resize(
-                self.imsize).convert('RGB')
+            self.images_filenames[index])
+        original = original.resize(self.imsize).convert('RGB')
         # apply label
         y = random.randint(0, 2)
         # copy original for second use
         x = original.copy()
+        # get image to crop for artificial defect
+        if self.subject in np.array(['carpet','grid','leather','tile','wood']):
+            random_subject = random.choice(self.classes)
+            image_for_cutting = Image.open(
+                'dataset/'+random_subject+'/train/good/000.png'
+            ).resize(self.imsize).convert('RGB')
+        else:
+            image_for_cutting = original.copy()
         
         # create new masks only for non-fixed objects
         if self.subject in np.array(['hazelnut', 'screw', 'metal_nut']):
-            segmentation = obj_mask(x)
+            segmentation = obj_mask(original)
         else:
             segmentation = self.fixed_segmentation
         
-        
-        
+        # container dims
         container_scaling_factor_patch = 2
         container_scaling_factor_scar = 2.5
         
@@ -191,36 +211,34 @@ class PeraDataset(Dataset):
             top = random.randint(0,x.size[1]-self.patch_size)
             x = x.crop((left,top, left+self.patch_size, top+self.patch_size))
             segmentation = segmentation.crop((left,top, left+self.patch_size, top+self.patch_size))
+            image_for_cutting = transforms.RandomCrop(self.patch_size)(image_for_cutting)
+            # container dim equal to patch
             container_scaling_factor_patch = 1
             container_scaling_factor_scar = 1
-            # only background -> no transformations
-            if torch.sum(transforms.ToTensor()(segmentation)) == 0:
-                y = 0
-        
+            # check working area sizes
+            if torch.sum(transforms.ToTensor()(segmentation)) < int((self.patch_size*self.patch_size)/2):
+               y = 0
         # apply jittering
         x = CPP.jitter_transforms(x)
         
         if y > 0:
-            # random position inside object mask  to paste artificial defect
-            coords = get_random_coordinate(segmentation)
+            # get coordinate map
+            segmentation = np.array(segmentation.convert('1'))
+            coords_map = np.flip(np.column_stack(np.where(segmentation == 1)), axis=1)
+            # random position inside object mask to paste artificial defect
+            coords = get_random_coordinate(coords_map)
+            
             # big defect (polygon)
             if y == 1:
-                if self.subject in np.array(['carpet','grid','leather','tile','wood']):
-                    random_subject = random.choice(self.classes)
-                    cutting = Image.open(
-                        'dataset/'+random_subject+'/train/good/000.png'
-                    ).resize(self.imsize).convert('RGB')
-                    patch = generate_patch(
-                            cutting,
-                            area_ratio=[0.02, 0.05],
-                            aspect_ratio=self.aspect_ratio,
-                            augs=CPP.jitter_transforms)
-                else:
-                    patch = generate_patch(
-                            original,
-                            area_ratio=[0.02, 0.09],
-                            aspect_ratio=self.aspect_ratio,
-                            augs=CPP.jitter_transforms) 
+                patch = generate_patch(
+                    image_for_cutting,
+                    area_ratio=CPP.rectangle_area_ratio,
+                    aspect_ratio=CPP.rectangle_aspect_ratio,
+                    augs=CPP.jitter_transforms
+                )
+                # check color similarity
+                if check_patch_and_defect_similarity(x, patch) > 0.999:
+                    patch = ImageOps.invert(patch)
                 coords, _ = check_valid_coordinates_by_container(
                         x.size, 
                         patch.size, 
@@ -232,36 +250,26 @@ class PeraDataset(Dataset):
                 x = paste_patch(x, patch, coords, mask) 
             # small defect (scar)
             else:
-                if self.subject in np.array(['carpet','grid','leather','tile','wood']):
-                    random_subject = random.choice(self.classes)
-                    cutting = Image.open(
-                        'dataset/'+random_subject+'/train/good/000.png'
-                    ).resize(self.imsize).convert('RGB')
-                    scar= generate_scar(
-                        cutting,
-                        self.scar_width,
-                        self.scar_thiccness,
-                        colorized=False,
-                        color_type='average' # random, average, sample
-                    )
-                else:
-                    scar= generate_scar(
-                        original,
-                        self.scar_width,
-                        self.scar_thiccness,
-                        colorized=False,
-                        color_type='average' # random, average, sample
-                    ) 
-                coords, _ = check_valid_coordinates_by_container(
-                        x.size, 
-                        scar.size, 
-                        current_coords=coords,
-                        container_scaling_factor=container_scaling_factor_patch
-                    )
-                scar = scar.filter(ImageFilter.SHARPEN)
+                scar= generate_patch(
+                    image_for_cutting,
+                    area_ratio=CPP.scar_area_ratio,
+                    aspect_ratio=CPP.scar_aspect_ratio,
+                    augs=CPP.jitter_transforms
+                )
+                # check color similarity
+                if check_patch_and_defect_similarity(x, scar) > 0.99:
+                    scar = ImageOps.invert(scar)
                 angle = random.randint(-45,45)
+                scar = scar.convert('RGBA')
                 scar = scar.rotate(angle, expand=True)
+                coords, _ = check_valid_coordinates_by_container(
+                    x.size, 
+                    scar.size, 
+                    current_coords=coords,
+                    container_scaling_factor=container_scaling_factor_scar
+                )
                 x = paste_patch(x, scar, coords, scar)
+        
         if self.transform:
             x = self.transform(x)
         return x, y, transforms.ToTensor()(original) 
