@@ -202,10 +202,16 @@ def generate_patch(
         cropped_patch = Image.new('RGB', (patch_w, patch_h), color=rgb)
     else:
         cropped_patch = image.crop((patch_left, patch_top, patch_right, patch_bottom))
-
+    
     if augs and colorized==False:
         cropped_patch = augs(cropped_patch)
     return cropped_patch
+
+
+def pad(img, padding:int=6):    
+    pd = Image.new('RGBA', (img.size[0]+padding, img.size[1]+padding), (0,0,0,0))
+    pd.paste(img, (int(padding/2),int(padding/2)))
+    return pd
 
 
 def generate_scar(

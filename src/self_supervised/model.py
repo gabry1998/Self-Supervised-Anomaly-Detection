@@ -1,4 +1,5 @@
 import random
+from sklearn.cluster import AffinityPropagation
 from sklearn.covariance import LedoitWolf
 from sklearn.neighbors import KernelDensity, NearestNeighbors
 from sklearn.metrics.pairwise import cosine_similarity
@@ -18,56 +19,86 @@ from self_supervised.support.functional import get_prediction_class, gt2label, n
 class PeraNet(pl.LightningModule):
     def __init__(
             self, 
-            #latent_space_dims:list=[512,512,512,512,512,512,512,512,512],
-            latent_space_dims:list=[512,512,512,512,512],
+            latent_space_layers:int=3,
             backbone:str='resnet18',
             lr:float=0.01,
             num_epochs:int=20,
             num_classes:int=3,
-            memory_bank_dim:int=500) -> None:
+            memory_bank_dim:int=50) -> None:
         super(PeraNet, self).__init__()
         self.save_hyperparameters()
         self.lr = lr
         self.num_epochs = num_epochs
         self.backbone = backbone
-        self.latent_space_dims = latent_space_dims
+        self.latent_space_layers = latent_space_layers
         
         self.memory_bank_dim = memory_bank_dim
         self.memory_bank = torch.tensor([])
         
         self.feature_extractor = self.setup_backbone(backbone)
-        self.latent_space = self.setup_latent_space(latent_space_dims)
-        self.classifier = self.setup_classifier(latent_space_dims[-1], num_classes)
+        layers = ['layer2','layer3']
+        self.setup_hooks(layers)
+        dim = 512 if layers is None else self._get_dim(layers)
+        self.latent_space = self.setup_latent_space(latent_space_layers=3, dim=dim)
+        self.classifier = self.setup_classifier(input_dim=dim, num_classes=num_classes)
 
         self.mvtec = False
         self.num_classes = num_classes
+        
+        self.activations={}
+        
+        self.batches_outputs = []
+        
+    
+    def _get_dim(self, layers:list):
+        dim = 512
+        if 'layer1' in layers:
+            dim += 64
+        if 'layer2' in layers:
+            dim += 128
+        if 'layer3' in layers:
+            dim += 256
+        return dim
+    
+    def get_activation(self, name):
+        def hook(model, input, output):
+            self.activations[name] = output.detach()
+        return hook
+    
     
     def summary(self):
         torch_summary(self.to('cpu'), (3,256,256), device='cpu')
     
     
+    def setup_hooks(self, layers:list=None):
+        if not layers is None:
+            if 'layer2' in layers:
+                self.feature_extractor.layer2.register_forward_hook(self.get_activation('layer2'))
+            if 'layer3' in layers:
+                self.feature_extractor.layer3.register_forward_hook(self.get_activation('layer3'))
+                
     def setup_backbone(self, backbone:str) -> nn.Sequential:
         if backbone == 'resnet18':
             feature_extractor = models.resnet18(weights="IMAGENET1K_V1")
-            last_layer= list(feature_extractor.named_modules())[-1][0].split('.')[0]
+            last_layer = list(feature_extractor.named_modules())[-1][0].split('.')[0]
             setattr(feature_extractor, last_layer, nn.Identity())
         return feature_extractor
     
     
-    def setup_latent_space(self, dims:list) -> nn.Sequential:
+    def setup_latent_space(self,latent_space_layers:int, dim:int) -> nn.Sequential:
+        dims = [dim for _ in range(latent_space_layers)]
         proj_layers = []
         if len(dims) > 1:
-            for i in range(len(dims)-1):
+            for i in range(0,len(dims)-1):
                 inp = dims[i]
-                out = dims[i+1]
+                out = dims[i]
                 layer = nn.Linear(inp, out, bias=False)
                 proj_layers.append(layer)
                 proj_layers.append(nn.BatchNorm1d(dims[i]))
                 proj_layers.append(nn.ReLU(inplace=True))
-            embeds = nn.Linear(dims[-2], dims[-1], bias=True)
+            proj_layers.append(nn.Linear(dims[-1], dims[-1], bias=True))
         else:
-            embeds = nn.Linear(dims[0], dims[0], bias=True)
-        proj_layers.append(embeds)
+            proj_layers.append(nn.Linear(dims[-1], dims[-1], bias=True))
         projection_head = nn.Sequential(
             *proj_layers
         )
@@ -81,8 +112,14 @@ class PeraNet(pl.LightningModule):
     def enable_mvtec_inference(self):
         self.mvtec = True
     
+    
     def disable_mvtec_inference(self):
         self.mvtec = False
+
+
+    def clear_memory_bank(self):
+        self.memory_bank = torch.tensor([])
+
 
     def unfreeze_net(self, modules:list=['backbone', 'latent_space']):
         if 'backbone' in modules:
@@ -105,7 +142,7 @@ class PeraNet(pl.LightningModule):
             self.latent_space.eval()
 
 
-    def layer_activations(self, x, layer:str='layer4'):
+    def layer_activations(self, x, layers:list=['layer4']) -> list:
         x = self.feature_extractor.conv1(x)
         x = self.feature_extractor.bn1(x)
         x = self.feature_extractor.relu(x)
@@ -116,14 +153,18 @@ class PeraNet(pl.LightningModule):
         l3 = self.feature_extractor.layer3(l2)
         l4 = self.feature_extractor.layer4(l3)
         
-        if layer=='layer1':
-            return l1
-        if layer=='layer2':
-            return l2
-        if layer=='layer3':
-            return l3
-        if layer=='layer4':
-            return l4
+        activations = []
+        
+        if 'layer1' in layers:
+            activations.append(l1)
+        if 'layer2' in layers:
+            activations.append(l2)
+        if 'layer3' in layers:
+            activations.append(l3)
+        if 'layer4' in layers:
+            activations.append(l4)
+        
+        return activations
     
     
     def on_save_checkpoint(self, checkpoint) -> None:
@@ -131,40 +172,63 @@ class PeraNet(pl.LightningModule):
 
     
     def on_load_checkpoint(self, checkpoint) -> None:
-        self.memory_bank = checkpoint['memory_bank']
+        if 'memory_bank' in checkpoint:
+            self.memory_bank = checkpoint['memory_bank']
+        else:
+            self.memory_bank = torch.tensor([])
     
     
     def on_train_epoch_end(self) -> None:
-        data = self.current_batch[0].to('cpu')
-        y_hat = get_prediction_class(self.current_batch[1].to('cpu'))
-        y_true = self.current_batch[2].to('cpu')
-        batch = torch.tensor([])
-        for i in range(len(data)):
-            if y_hat[i] == 0 and y_true[i] == 0:
-                batch = torch.cat([batch, data[i][None, :]])
-        self.memory_bank = torch.cat((self.memory_bank, batch))
+        for current_batch in self.batches_outputs:
+            data = current_batch[0]
+            y_hat = get_prediction_class(current_batch[1])
+            y_true = current_batch[2]
+            batch = torch.tensor([])
+            for i in range(len(data)):
+                if y_hat[i] == 0 and y_true[i] == 0:
+                    batch = torch.cat([batch, data[i][None, :]])
+            self.memory_bank = torch.cat([self.memory_bank, batch])
         if len(self.memory_bank) > self.memory_bank_dim:
             items_to_remove = len(self.memory_bank) - self.memory_bank_dim
             self.memory_bank = self.memory_bank[items_to_remove:]
-            
+        
         
     def forward(self, x):
         output = {}
-        
+        self.activations = {}
+        # forwarding through backbone
         features = self.feature_extractor(x)
         features = torch.flatten(features, 1)
+        
+        
+        if 'layer3' in self.activations:
+            f3:Tensor = self.activations['layer3']
+            f3 = F.adaptive_avg_pool2d(f3, output_size=(1,1))
+            f3 = torch.flatten(f3, 1)
+            features = torch.cat([f3, features], dim=1)
+        if 'layer2' in self.activations:
+            f2:Tensor = self.activations['layer2']
+            f2 = F.adaptive_avg_pool2d(f2, output_size=(1,1))
+            f2 = torch.flatten(f2, 1)
+            features = torch.cat([f2, features], dim=1)
+        if 'layer1' in self.activations:
+            f1:Tensor = self.activations['layer2']
+            f1 = F.adaptive_avg_pool2d(f2, output_size=(1,1))
+            f1 = torch.flatten(f1, 1)
+            features = torch.cat([f1, features], dim=1)
+        
+        
+        # feeding latent space with embedding vector
         embeddings = self.latent_space(features)
         y_hat = self.classifier(embeddings)
+        
         output['classifier'] = y_hat
-        #output['latent_space'] = torch.cat([embeddings, features], dim=1)
         output['latent_space'] = embeddings
         return output
+     
     
-    
-    def training_step(self, batch, batch_idx):
-        random_idx = random.randint(0, self.trainer.num_training_batches-1)
-        x, y, _ = batch
-        
+    def training_step(self, batch, batch_idx):    
+        x, y, _ = batch   
         outputs = self(x)
         y_hat = outputs['classifier']
         loss = F.cross_entropy(y_hat, y)
@@ -175,8 +239,12 @@ class PeraNet(pl.LightningModule):
                       on_step=False,
                       on_epoch=True,
                       prog_bar=True)
-        if batch_idx == random_idx:
-            self.current_batch = (outputs['latent_space'], outputs['classifier'], y)
+        current_out = (
+            outputs['latent_space'].detach().to('cpu'), 
+            y_hat.detach().to('cpu'), 
+            y.detach().to('cpu')
+            )
+        self.batches_outputs.append(current_out)
         return loss
 
     
@@ -302,73 +370,20 @@ class GDE():
         return torch.tensor(-scores/norm)
 
 
-class MahalanobisDistance(object):
-    def fit(self, embeddings:Tensor):
-        self.mean = torch.mean(embeddings, axis=0)
-        self.inv_cov = torch.Tensor(LedoitWolf().fit(embeddings.cpu()).precision_,device="cpu")
-    def predict(self, embeddings:Tensor):
-        distances = self.mahalanobis_distance(embeddings, self.mean, self.inv_cov)
-        return distances
-    
-    @staticmethod
-    def mahalanobis_distance(
-        values: torch.Tensor, mean: torch.Tensor, inv_covariance: torch.Tensor
-    ) -> torch.Tensor:
-        assert values.dim() == 2
-        assert 1 <= mean.dim() <= 2
-        assert len(inv_covariance.shape) == 2
-        assert values.shape[1] == mean.shape[-1]
-        assert mean.shape[-1] == inv_covariance.shape[0]
-        assert inv_covariance.shape[0] == inv_covariance.shape[1]
-
-        if mean.dim() == 1:  # Distribution mean.
-            mean = mean.unsqueeze(0)
-        x_mu = values - mean  # batch x features
-        # Same as dist = x_mu.t() * inv_covariance * x_mu batch wise
-        dist = torch.einsum("im,mn,in->i", x_mu, inv_covariance, x_mu)
-        #m = torch.dot(x_mu, torch.matmul(torch.inverse(inv_covariance), x_mu))
-        return dist.sqrt()
-
-
-class CosineEstimator:
-    def __init__(self) -> None:
-        pass
-    
-    def fit(self, embedding:Tensor):
-        mean = torch.mean(embedding, axis=0)
-        self.mean = np.array(mean[None, :])
-    
-    def predict(self, x:Tensor):
-        def calculate_cosine(vector):
-            vector = np.array(vector[None, :])
-            out = 1-cosine_similarity(self.mean, vector)
-            if out < 0.:
-                return 0.
-            if out > 1.:
-                return 1.
-            return out
-        
-        anomaly_scores = np.apply_along_axis(arr=x, axis=1, func1d=calculate_cosine)
-        anomaly_scores = torch.tensor(anomaly_scores)
-        return anomaly_scores
-
-
 class AnomalyDetector:
     def __init__(self) -> None:
         pass
     
     def fit(self, embeddings:Tensor):
+        self.k = 5
+        embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
         self.nbrs:NearestNeighbors = NearestNeighbors(
-            n_neighbors=1, algorithm='auto', metric='cosine').fit(embeddings)
+            n_neighbors=self.k, algorithm='auto', radius=2, metric='cosine').fit(embeddings)
 
     def predict(self, x:Tensor):
+        x = torch.nn.functional.normalize(x, p=2, dim=1)
         anomaly_scores = self.nbrs.kneighbors(x)[0].squeeze()
         anomaly_scores = torch.tensor(anomaly_scores)
-        anomaly_scores[anomaly_scores > 1.] = 1.
-        anomaly_scores[anomaly_scores < 0.1] = 0.
+        if self.k > 1:
+            anomaly_scores = torch.mean(anomaly_scores, dim=1)
         return anomaly_scores
-    
-    
-
-    
-    

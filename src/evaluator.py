@@ -1,6 +1,6 @@
 import shutil
 from self_supervised.gradcam import GradCam
-from self_supervised.model import GDE, AnomalyDetector, CosineEstimator, PeraNet
+from self_supervised.model import GDE, AnomalyDetector, PeraNet
 from self_supervised.datasets import MVTecDatamodule, GenerativeDatamodule
 from tqdm import tqdm
 from torchvision import transforms
@@ -57,6 +57,12 @@ class Evaluator:
         random.seed(seed)
         np.random.seed(seed)
         
+        # scores
+        self.image_auroc = -1
+        self.pixel_auroc = -1
+        self.aupro = -1
+        
+        
         
     def setup_dataset(self, imsize:tuple=(256,256), batch_size:int=128):
         
@@ -94,8 +100,9 @@ class Evaluator:
         if sample_imgs > len(self.mvtec_datamodule.train_dataloader().dataset.images_filenames):
             sample_imgs = len(self.mvtec_datamodule.train_dataloader().dataset.images_filenames)
         tot_embeddings = []
-        pbar = tqdm(range(sample_imgs), desc='train data')
-        for i in pbar:
+        print()
+        pbar2 = tqdm(range(sample_imgs), desc='train data', position=1, leave=False)
+        for i in pbar2:
             x, _, _ = self.mvtec_datamodule.train_dataloader().dataset.__getitem__(i)
             x_patches = extract_patches(x.unsqueeze(0), self.patch_dim, self.stride)
             if torch.cuda.is_available():
@@ -175,11 +182,16 @@ class Evaluator:
             anomaly_maps = torch.tensor([])
             # setting up anomaly detector
             self.detector = AnomalyDetector()
-            self.detector.fit(peranet.memory_bank.detach())
+            if peranet.memory_bank.shape[0] > 0:
+                self.detector.fit(peranet.memory_bank.detach())
+            else:
+                self.detector.fit(self._get_detector_good_embeddings())
             images, gts, originals = next(iter(self.mvtec_datamodule.test_dataloader()))
             j = len(images)
             # inferencing over images
-            for i in tqdm(range(j), desc='test images'):
+            print()
+            pbar3 = tqdm(range(j), desc='test images', position=2, leave=False)
+            for i in pbar3:
                 x_prime, gt, x = images[i], gts[i], originals[i]
                 # get patches
                 patches = extract_patches(x_prime[None, :], self.patch_dim, self.stride)
@@ -193,7 +205,7 @@ class Evaluator:
                 # saliency map
                 dim = int(np.sqrt(embeddings.shape[0]))
                 saliency_map = torch.reshape(scores, (dim, dim))
-                ksize = 5
+                ksize = 7
                 saliency_map = functional.gaussian_blur(saliency_map[None,:], kernel_size=ksize).squeeze()
                 saliency_map = F.relu(saliency_map)
                 saliency_map = F.interpolate(saliency_map[None,None,:], self.imsize[0], mode='bilinear').squeeze()
@@ -209,10 +221,19 @@ class Evaluator:
         # image level roc
         if not self.patch_localization:
             fpr_image, tpr_image, auc_score_image = self._compute_auroc(mvtec_y_true, anomaly_scores)
+            self.image_auroc = auc_score_image
+            vis.plot_curve(
+                fpr_image, tpr_image, 
+                auc_score_image, 
+                saving_path=self.outputs_dir,
+                title='Roc curve for '+self.subject.upper()+' ['+str(self.seed)+']',
+                name='image_roc.png')
         # pixel level roc
         fpr, tpr, auc_score = self._compute_auroc(mvtec_y_true_pixel, anomaly_scores_pixel)
+        self.pixel_auroc = auc_score
         # pro
         all_fprs, all_pros, au_pro = self._compute_aupro(ground_truth_maps, anomaly_maps)
+        self.aupro = au_pro
         vis.plot_curve(
             fpr, tpr, 
             auc_score, 
@@ -227,6 +248,7 @@ class Evaluator:
             title='Pro curve for '+self.subject.upper()+' ['+str(seed)+']',
             name='pro.png'
         )
+        
 
         
 
@@ -249,26 +271,84 @@ class Evaluator:
         fpr, tpr, _ = mtr.compute_roc(targets, scores)
         auc_score = mtr.compute_auc(fpr, tpr)
         return fpr, tpr, auc_score
+
+
+def get_textures_names():
+    return ['carpet','grid','leather','tile','wood']
+
+
+def obj_set_one():
+    return [
+        'bottle',
+        'cable',
+        'capsule',
+        'hazelnut',
+        'metal_nut']
+
+
+def obj_set_two():
+    return [
+        'pill',
+        'screw',
+        'toothbrush',
+        'transistor',
+        'zipper']
     
     
 if __name__ == "__main__":
+    metric_dict={}
     dataset_dir='dataset/'
     root_inputs_dir='brutta_brutta_copia/computations/'
     root_outputs_dir='brutta_brutta_copia/computations/'
     imsize=(256,256)
-    seed=204110176
+    patch_dim = 32
+    stride=8
+    seed=123456789
     patch_localization=True
+      
+    experiments = get_all_subject_experiments('dataset/')
+    textures = get_textures_names()
+    obj1 = obj_set_one()
+    obj2 = obj_set_two()
+    experiments_list = ['bottle', 'metal_nut']
     
-    evaluator = Evaluator(
-        dataset_dir=dataset_dir,
-        root_input_dir=root_inputs_dir,
-        root_output_dir=root_outputs_dir,
-        subject='bottle',
-        model_name='best_model.ckpt',
-        patch_localization=patch_localization,
-        patch_dim=32,
-        stride=8,
-        seed=204110176
-    )
-    evaluator.setup_dataset()
-    evaluator.evaluate()
+    image_aurocs = []
+    pixel_aurocs = []
+    aupros = []
+    
+    pbar = tqdm(range(len(experiments_list)), position=0, leave=False)
+    for i in pbar:
+        pbar.set_description('Evaluation pipeline | current subject is '+experiments_list[i].upper())
+        evaluator = Evaluator(
+            dataset_dir=dataset_dir,
+            root_input_dir=root_inputs_dir,
+            root_output_dir=root_outputs_dir,
+            subject=experiments_list[i],
+            model_name='best_model.ckpt',
+            patch_localization=patch_localization,
+            patch_dim=patch_dim,
+            stride=stride,
+            seed=seed
+        )
+        evaluator.setup_dataset()
+        evaluator.evaluate()
+        
+        image_aurocs.append(evaluator.image_auroc)
+        pixel_aurocs.append(evaluator.pixel_auroc)
+        aupros.append(evaluator.aupro)
+        os.system('clear')
+    
+    experiments_list.append('average')
+    if not patch_localization:
+        metric_dict['AUC (image)'] = np.append(
+            image_aurocs, 
+            np.mean(image_aurocs))
+    metric_dict['AUC (pixel)'] = np.append(
+        pixel_aurocs, 
+        np.mean(pixel_aurocs))
+    metric_dict['AUPRO'] = np.append(
+        aupros, 
+        np.mean(aupros))
+    
+    report = mtr.metrics_to_dataframe(metric_dict, np.array(experiments_list))
+    mtr.export_dataframe(report, saving_path=root_outputs_dir, name='patch_level_scores.csv')

@@ -1,22 +1,16 @@
-from PIL import Image, ImageFilter
+from PIL import Image
 from tqdm import tqdm
 from self_supervised.gradcam import GradCam
 from torchvision import transforms
 from torchvision.transforms import functional
 from self_supervised.support.functional import *
 from self_supervised.support.visualization import *
-from skimage.segmentation import slic
-from skimage import color
-from sklearn.neighbors import NearestNeighbors
-import self_supervised.support.constants as CONST
 import self_supervised.datasets as dt
 import self_supervised.model as md
-import self_supervised.metrics as mtr
 import random
 import os
 import torch
 import numpy as np
-import pytorch_lightning as pl
 
 
 
@@ -102,7 +96,10 @@ class Localizer:
             if torch.cuda.is_available():
                 self.model.to('cuda')
             self.detector = md.AnomalyDetector()
-            self.detector.fit(self.model.memory_bank.detach())
+            if self.model.memory_bank.numel() > 0:
+                self.detector.fit(self.model.memory_bank)
+            else:
+                self.detector.fit(self._get_detector_good_embeddings())
             
         
     def setup_dataset(self, imsize:tuple=(256,256)):
@@ -139,10 +136,12 @@ class Localizer:
                 anomaly_scores = self.detector.predict(embeddings)
                 dim = int(np.sqrt(embeddings.shape[0]))
                 saliency_map = torch.reshape(anomaly_scores, (dim, dim))
-                ksize = 5
+                ksize = 7
                 saliency_map = functional.gaussian_blur(saliency_map[None,:], kernel_size=ksize).squeeze()
                 saliency_map = F.relu(saliency_map)
                 saliency_map = F.interpolate(saliency_map[None,None,:], self.imsize[0], mode='bilinear').squeeze()
+                saliency_map[saliency_map < 0.] = 0.
+                saliency_map[saliency_map > 1.] = 1.
             heatmap = apply_heatmap(x[None, :], saliency_map[None, :])
             image = imagetensor2array(x)
             gt = imagetensor2array(gt)
@@ -180,6 +179,7 @@ class Localizer:
 def get_textures_names():
     return ['carpet','grid','leather','tile','wood']
 
+
 def obj_set_one():
     return [
         'bottle',
@@ -187,6 +187,7 @@ def obj_set_one():
         'capsule',
         'hazelnut',
         'metal_nut']
+
 
 def obj_set_two():
     return [
@@ -197,15 +198,14 @@ def obj_set_two():
         'zipper']
 
 
-
 if __name__ == "__main__":
     dataset_dir='dataset/'
-    root_inputs_dir='brutta_copia/computations/'
-    root_outputs_dir='brutta_copia/localization/'
+    root_inputs_dir='brutta_brutta_copia/computations/'
+    root_outputs_dir='brutta_brutta_copia/localization/'
     imsize=(256,256)
     patch_dim = 32
     stride=8
-    seed=204110176
+    seed=0
     patch_localization=True
       
     experiments = get_all_subject_experiments('dataset/')
@@ -213,7 +213,7 @@ if __name__ == "__main__":
     obj1 = obj_set_one()
     obj2 = obj_set_two()
     
-    experiments_list = ['hazelnut']
+    experiments_list = ['metal_nut']
     pbar = tqdm(range(len(experiments_list)), position=0, leave=False)
     for i in pbar:
         pbar.set_description('Localization pipeline | current subject is '+experiments_list[i].upper())
@@ -230,6 +230,6 @@ if __name__ == "__main__":
             seed=seed
         )
         localizer.setup_model()
-        localizer.localize(num_images=20)
-        os.system('clear')
+        localizer.localize(num_images=10)
+        #os.system('clear')
         

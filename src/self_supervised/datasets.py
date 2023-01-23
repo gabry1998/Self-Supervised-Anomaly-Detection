@@ -1,6 +1,6 @@
 import numpy as np
 import pytorch_lightning as pl
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageEnhance
 from skimage.segmentation import slic
 from skimage import color
 from sklearn.model_selection import train_test_split as tts
@@ -164,6 +164,7 @@ class PeraDataset(Dataset):
         self.colorized_scar = colorized_scar
         self.mode = mode
         
+                
         all_classes = np.array(get_all_subject_experiments('dataset/'))
         idx = np.where(all_classes == self.subject)
         self.classes = np.delete(all_classes, idx)
@@ -194,6 +195,7 @@ class PeraDataset(Dataset):
             ).resize(self.imsize).convert('RGB')
         else:
             image_for_cutting = original.copy()
+        
         
         # create new masks only for non-fixed objects
         if self.subject in np.array(['hazelnut', 'screw', 'metal_nut']):
@@ -230,15 +232,26 @@ class PeraDataset(Dataset):
             
             # big defect (polygon)
             if y == 1:
-                patch = generate_patch(
-                    image_for_cutting,
-                    area_ratio=CPP.rectangle_area_ratio,
-                    aspect_ratio=CPP.rectangle_aspect_ratio,
-                    augs=CPP.jitter_transforms
-                )
+                if random.randint(0,1)==1:
+                    patch = generate_patch(
+                        image_for_cutting,
+                        area_ratio=CPP.rectangle_area_ratio,
+                        aspect_ratio=CPP.rectangle_aspect_ratio,
+                        augs=CPP.jitter_transforms
+                    )
+                else:
+                    patch = generate_patch(
+                        image_for_cutting,
+                        area_ratio=CPP.rectangle_area_ratio,
+                        aspect_ratio=CPP.rectangle_aspect_ratio,
+                        colorized=True,
+                        color_type='average'
+                    )
                 # check color similarity
-                if check_patch_and_defect_similarity(x, patch) > 0.999:
-                    patch = ImageOps.invert(patch)
+                if check_patch_and_defect_similarity(x, patch) > 0.99:
+                    low = np.random.uniform(0.3, 0.6)
+                    high = np.random.uniform(1.2, 1.8)
+                    patch = ImageEnhance.Brightness(patch).enhance(random.choice([low, high]))
                 coords, _ = check_valid_coordinates_by_container(
                         x.size, 
                         patch.size, 
@@ -247,21 +260,34 @@ class PeraDataset(Dataset):
                     )
                 mask = None
                 mask = rect2poly(patch, regular=False, sides=8)
+                
                 x = paste_patch(x, patch, coords, mask) 
             # small defect (scar)
             else:
-                scar= generate_patch(
-                    image_for_cutting,
-                    area_ratio=CPP.scar_area_ratio,
-                    aspect_ratio=CPP.scar_aspect_ratio,
-                    augs=CPP.jitter_transforms
-                )
+                if random.randint(0,1)==1:
+                    scar= generate_patch(
+                        image_for_cutting,
+                        area_ratio=CPP.scar_area_ratio,
+                        aspect_ratio=CPP.scar_aspect_ratio,
+                        augs=CPP.jitter_transforms
+                    )
+                else:
+                    scar= generate_patch(
+                        image_for_cutting,
+                        area_ratio=CPP.scar_area_ratio,
+                        aspect_ratio=CPP.scar_aspect_ratio,
+                        colorized=True,
+                        color_type='average'
+                    )
                 # check color similarity
                 if check_patch_and_defect_similarity(x, scar) > 0.99:
-                    scar = ImageOps.invert(scar)
+                    low = np.random.uniform(0.3, 0.5)
+                    high = np.random.uniform(1.5, 1.7)
+                    scar = ImageEnhance.Brightness(scar).enhance(random.choice([low, high]))
                 angle = random.randint(-45,45)
                 scar = scar.convert('RGBA')
                 scar = scar.rotate(angle, expand=True)
+                
                 coords, _ = check_valid_coordinates_by_container(
                     x.size, 
                     scar.size, 
