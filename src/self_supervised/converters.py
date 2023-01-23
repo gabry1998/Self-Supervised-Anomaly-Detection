@@ -4,7 +4,7 @@ import numpy as np
 
 
 
-def gt2label(gt_list:Tensor, negative=0, positive=1) -> list:
+def gt2label(gt_list:Tensor, negative:int=0, positive:int=1) -> list:
     return [negative if torch.sum(x) == 0 else positive for x in gt_list]
 
 

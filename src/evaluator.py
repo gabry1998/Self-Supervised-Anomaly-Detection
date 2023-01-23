@@ -92,7 +92,7 @@ class Evaluator:
     
     
     def _get_detector_good_embeddings(self):
-        model:PeraNet = PeraNet.load_from_checkpoint(self.model_dir+self.model_name)
+        model:PeraNet = PeraNet().load_from_checkpoint(self.model_dir+self.model_name)
         model.enable_mvtec_inference()
         model.eval()
         if torch.cuda.is_available():
@@ -311,7 +311,7 @@ if __name__ == "__main__":
     textures = get_textures_names()
     obj1 = obj_set_one()
     obj2 = obj_set_two()
-    experiments_list = ['bottle', 'metal_nut']
+    experiments_list = ['bottle']
     
     image_aurocs = []
     pixel_aurocs = []

@@ -206,7 +206,7 @@ if __name__ == "__main__":
     imsize=(256,256)
     patch_dim = 32
     stride=8
-    seed=0
+    seed=123456789
     patch_localization=True
       
     experiments = get_all_subject_experiments('dataset/')
@@ -214,7 +214,7 @@ if __name__ == "__main__":
     obj1 = obj_set_one()
     obj2 = obj_set_two()
     
-    experiments_list = ['metal_nut']
+    experiments_list = ['bottle']
     pbar = tqdm(range(len(experiments_list)), position=0, leave=False)
     for i in pbar:
         pbar.set_description('Localization pipeline | current subject is '+experiments_list[i].upper())

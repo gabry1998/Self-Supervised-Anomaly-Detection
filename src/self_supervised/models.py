@@ -1,89 +1,102 @@
 from sklearn.neighbors import KernelDensity, NearestNeighbors
 from torch import nn
 from torchsummary import summary as torch_summary
-import torch
+from torchvision.models import ResNet
 from torchvision import models
-import pytorch_lightning as pl
-import torch.nn.functional as F
 from torchmetrics.functional import accuracy
-import numpy as np
 from torch import Tensor
 from self_supervised.converters import gt2label
 from self_supervised.functional import get_prediction_class
+from typing import Tuple
+import numpy as np
+import torch
+import pytorch_lightning as pl
+import torch.nn.functional as F
 
 
 
 
 class PeraNet(pl.LightningModule):
     def __init__(
-            self, 
+            self,
+            intermediate_outputs:list=['layer2','layer3'],
             latent_space_layers:int=3,
-            backbone:str='resnet18',
-            lr:float=0.01,
-            num_epochs:int=20,
+            latent_space_layers_base_dim:int=512,
             num_classes:int=3,
-            memory_bank_dim:int=50) -> None:
+            memory_bank_dim:int=100) -> None:
         super(PeraNet, self).__init__()
-        self.save_hyperparameters()
-        self.lr = lr
-        self.num_epochs = num_epochs
-        self.backbone = backbone
-        self.latent_space_layers = latent_space_layers
-        
-        self.memory_bank_dim = memory_bank_dim
-        self.memory_bank = torch.tensor([])
-        
-        self.feature_extractor = self.setup_backbone(backbone)
-        layers = ['layer2','layer3']
-        self.setup_hooks(layers)
-        dim = 512 if layers is None else self._get_dim(layers)
-        self.latent_space = self.setup_latent_space(latent_space_layers=3, dim=dim)
-        self.classifier = self.setup_classifier(input_dim=dim, num_classes=num_classes)
+
+        self.backbone = 'resnet18'    
+        self.__build_net(
+            intermediate_outputs=intermediate_outputs,
+            latent_space_layers=latent_space_layers,
+            latent_space_layers_base_dim=latent_space_layers_base_dim,
+            num_classes=num_classes)
 
         self.mvtec = False
         self.num_classes = num_classes
         
-        self.activations={}
-        
         self.batches_outputs = []
+        self.memory_bank_dim = memory_bank_dim
+        self.memory_bank = torch.tensor([])
+    
+    
+    def compile(self, learning_rate:float=0.03, epochs:int=30) -> None:
+        self.lr = learning_rate
+        self.num_epochs = epochs
+        self.save_hyperparameters()
         
     
-    def _get_dim(self, layers:list):
-        dim = 512
-        if 'layer1' in layers:
-            dim += 64
-        if 'layer2' in layers:
-            dim += 128
-        if 'layer3' in layers:
-            dim += 256
-        return dim
-    
-    def get_activation(self, name):
-        def hook(model, input, output):
-            self.activations[name] = output.detach()
-        return hook
-    
-    
-    def summary(self):
-        torch_summary(self.to('cpu'), (3,256,256), device='cpu')
-    
-    
-    def setup_hooks(self, layers:list=None):
-        if not layers is None:
+    def __build_net(
+            self, 
+            intermediate_outputs:list=None,
+            latent_space_layers:int=3,
+            latent_space_layers_base_dim:int=512,
+            num_classes:int=3) -> None:
+        
+        # function for hooks
+        def get_activation(name):
+            def hook(model, input, output):
+                self.activations[name] = output.detach()
+            return hook
+
+        # setup backbone
+        self.feature_extractor = self.__setup_backbone()
+        
+        # func for FC layers dim
+        def get_dim(layers:list, base_dim:int):
+            dim = base_dim
+            if 'layer1' in layers:
+                dim += 64
+                self.feature_extractor.layer1.register_forward_hook(get_activation('layer1'))
             if 'layer2' in layers:
-                self.feature_extractor.layer2.register_forward_hook(self.get_activation('layer2'))
+                dim += 128
+                self.feature_extractor.layer2.register_forward_hook(get_activation('layer2'))
             if 'layer3' in layers:
-                self.feature_extractor.layer3.register_forward_hook(self.get_activation('layer3'))
-                
-    def setup_backbone(self, backbone:str) -> nn.Sequential:
-        if backbone == 'resnet18':
-            feature_extractor = models.resnet18(weights="IMAGENET1K_V1")
-            last_layer = list(feature_extractor.named_modules())[-1][0].split('.')[0]
-            setattr(feature_extractor, last_layer, nn.Identity())
+                dim += 256
+                self.feature_extractor.layer3.register_forward_hook(get_activation('layer3'))
+            return dim
+
+        dim = latent_space_layers_base_dim if intermediate_outputs is None \
+            else get_dim(intermediate_outputs, latent_space_layers_base_dim)
+        # setup latent space
+        self.latent_space = self.__setup_latent_space(
+            latent_space_layers=latent_space_layers, 
+            dim=dim)
+        # setup classifier
+        self.classifier = self.__setup_classifier(
+            input_dim=dim, 
+            num_classes=num_classes)
+     
+     
+    def __setup_backbone(self) -> ResNet:
+        feature_extractor = models.resnet18(weights="IMAGENET1K_V1")
+        last_layer = list(feature_extractor.named_modules())[-1][0].split('.')[0]
+        setattr(feature_extractor, last_layer, nn.Identity())
         return feature_extractor
     
     
-    def setup_latent_space(self,latent_space_layers:int, dim:int) -> nn.Sequential:
+    def __setup_latent_space(self,latent_space_layers:int, dim:int) -> nn.Sequential:
         dims = [dim for _ in range(latent_space_layers)]
         proj_layers = []
         if len(dims) > 1:
@@ -103,23 +116,27 @@ class PeraNet(pl.LightningModule):
         return projection_head
     
     
-    def setup_classifier(self, input_dim:int, num_classes:int) -> nn.Linear:
+    def __setup_classifier(self, input_dim:int, num_classes:int) -> nn.Linear:
         return nn.Linear(input_dim, num_classes)
-        
+       
+
+    def summary(self) -> None:
+        torch_summary(self.to('cpu'), (3,256,256), device='cpu')
+     
     
-    def enable_mvtec_inference(self):
+    def enable_mvtec_inference(self) -> None:
         self.mvtec = True
     
     
-    def disable_mvtec_inference(self):
+    def disable_mvtec_inference(self) -> None:
         self.mvtec = False
 
 
-    def clear_memory_bank(self):
+    def clear_memory_bank(self) -> None:
         self.memory_bank = torch.tensor([])
 
 
-    def unfreeze_net(self, modules:list=['backbone', 'latent_space']):
+    def unfreeze_net(self, modules:list=['backbone', 'latent_space']) -> None:
         if 'backbone' in modules:
             print('uh')
             for param in self.feature_extractor.parameters():
@@ -129,7 +146,7 @@ class PeraNet(pl.LightningModule):
                 param.requires_grad = True
     
     
-    def freeze_net(self, modules:list=['backbone', 'latent_space']):
+    def freeze_net(self, modules:list=['backbone', 'latent_space']) -> None:
         if 'backbone' in modules:
             for param in self.feature_extractor.parameters():
                 param.requires_grad = False
@@ -174,6 +191,10 @@ class PeraNet(pl.LightningModule):
             self.memory_bank = checkpoint['memory_bank']
         else:
             self.memory_bank = torch.tensor([])
+            
+        if len(self.memory_bank) > self.memory_bank_dim:
+            items_to_remove = len(self.memory_bank) - self.memory_bank_dim
+            self.memory_bank = self.memory_bank[items_to_remove:]
     
     
     def on_train_epoch_end(self) -> None:
@@ -191,7 +212,7 @@ class PeraNet(pl.LightningModule):
             self.memory_bank = self.memory_bank[items_to_remove:]
         
         
-    def forward(self, x):
+    def forward(self, x:Tensor) -> dict:
         output = {}
         self.activations = {}
         # forwarding through backbone
@@ -210,8 +231,8 @@ class PeraNet(pl.LightningModule):
             f2 = torch.flatten(f2, 1)
             features = torch.cat([f2, features], dim=1)
         if 'layer1' in self.activations:
-            f1:Tensor = self.activations['layer2']
-            f1 = F.adaptive_avg_pool2d(f2, output_size=(1,1))
+            f1:Tensor = self.activations['layer1']
+            f1 = F.adaptive_avg_pool2d(f1, output_size=(1,1))
             f1 = torch.flatten(f1, 1)
             features = torch.cat([f1, features], dim=1)
         
@@ -225,7 +246,7 @@ class PeraNet(pl.LightningModule):
         return output
      
     
-    def training_step(self, batch, batch_idx):    
+    def training_step(self, batch:Tuple[Tensor], batch_idx) -> Tensor:    
         x, y, _ = batch   
         outputs = self(x)
         y_hat = outputs['classifier']
@@ -246,7 +267,7 @@ class PeraNet(pl.LightningModule):
         return loss
 
     
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch:Tuple[Tensor], batch_idx) -> dict:
         x, y, _ = batch
         
         outputs = self(x)
@@ -263,7 +284,7 @@ class PeraNet(pl.LightningModule):
         return metrics
 
 
-    def test_step(self, batch, batch_idx):
+    def test_step(self, batch:Tuple[Tensor], batch_idx) -> dict:
         x, y, _ = batch
         if self.mvtec:
             y = torch.tensor(gt2label(y))
@@ -287,7 +308,7 @@ class PeraNet(pl.LightningModule):
         return metrics
     
     
-    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+    def predict_step(self, batch:Tuple[Tensor], batch_idx, dataloader_idx=0) -> dict:
         outputs = {
             'x':None,
             'x_prime':None,
@@ -326,7 +347,7 @@ class PeraNet(pl.LightningModule):
         return outputs
     
     
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> None:
         optimizer = torch.optim.SGD(self.parameters(), self.lr, momentum=0.9, weight_decay=0.0005)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, self.num_epochs)
         return [optimizer], [scheduler]
@@ -350,13 +371,14 @@ class AnomalyDetector:
     def __init__(self) -> None:
         pass
     
-    def fit(self, embeddings:Tensor):
-        self.k = 5
+    def fit(self, embeddings:Tensor) -> None:
+        self.k = 3
         embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
         self.nbrs:NearestNeighbors = NearestNeighbors(
-            n_neighbors=self.k, algorithm='auto', radius=2, metric='cosine').fit(embeddings)
+            n_neighbors=self.k, algorithm='auto', metric='cosine').fit(embeddings)
 
-    def predict(self, x:Tensor):
+
+    def predict(self, x:Tensor) -> Tensor:
         x = torch.nn.functional.normalize(x, p=2, dim=1)
         anomaly_scores = self.nbrs.kneighbors(x)[0].squeeze()
         anomaly_scores = torch.tensor(anomaly_scores)

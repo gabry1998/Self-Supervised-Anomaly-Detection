@@ -1,12 +1,27 @@
-import numpy as np
-import pytorch_lightning as pl
 from PIL import Image, ImageEnhance
 from sklearn.model_selection import train_test_split as tts
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 from torchvision.transforms import Compose
-from .dataset_generator import *
-from .functional import *
+from self_supervised.dataset_generator import \
+    check_color_similarity, \
+    check_valid_coordinates_by_container, \
+    generate_patch, \
+    get_random_coordinate, \
+    obj_mask, paste_patch, \
+    rect2poly
+from self_supervised.functional import \
+    duplicate_filenames, \
+    get_all_subject_experiments, \
+    get_ground_truth, \
+    get_ground_truth_filename, \
+    get_filenames, \
+    get_test_data_filenames
+from numpy import ndarray
+import random
+import torch
+import numpy as np
+import pytorch_lightning as pl
 
 
 class CPP:
@@ -16,7 +31,7 @@ class CPP:
     rectangle_aspect_ratio = ((0.3, 1),(1, 3.3))
     
     scar_area_ratio = (0.02, 0.05)
-    scar_aspect_ratio = ((0.1, 0.2),(3.1, 3.3))
+    scar_aspect_ratio = ((0.1, 1),(1, 3.3))
 
     jitter_transforms = transforms.ColorJitter(
                             brightness = jitter_offset,
@@ -30,7 +45,7 @@ class MVTecDataset(Dataset):
             self,
             dataset_dir:str,
             subject:str,
-            images_filenames,
+            images_filenames:list,
             imsize:tuple=(256,256),
             transform:Compose=None,
             ) -> None:
@@ -66,8 +81,7 @@ class MVTecDatamodule(pl.LightningDataModule):
             subject:str,
             imsize:tuple=(256,256),
             batch_size:int=32,  
-            seed:int=0,
-            localization=False):
+            seed:int=0):
             
         super().__init__()
         self.root_dir = root_dir
@@ -75,15 +89,14 @@ class MVTecDatamodule(pl.LightningDataModule):
         self.imsize = imsize
         self.batch_size = batch_size
         self.seed = seed
-        self.localization = localization
 
         self.transform = self.transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
         ])
         
-        self.train_images_filenames = get_image_filenames(self.root_dir+'/train/good/')
-        self.test_images_filenames = get_mvtec_test_images(self.root_dir+'/test/')
+        self.train_images_filenames = get_filenames(self.root_dir+'/train/good/')
+        self.test_images_filenames = get_test_data_filenames(self.root_dir+'/test/')
     
     
     def setup(self, stage=None) -> None:
@@ -149,15 +162,11 @@ class PretextTaskDataset(Dataset):
     def __init__(
             self,
             subject:str,
-            images_filenames,
+            images_filenames:ndarray,
             imsize:tuple=(256,256),
-            transform=None,
-            polygons:bool=False,
-            colorized_scar:bool=False,
+            transform:Compose=None,
             patch_localization:bool=False,
-            patch_size:tuple=64,
-            mode:str='test' #test, train
-            ) -> None:
+            patch_size:tuple=64) -> None:
 
         super(PretextTaskDataset).__init__()
         self.subject = subject
@@ -167,11 +176,7 @@ class PretextTaskDataset(Dataset):
         self.transform = transform
         self.patch_localization = patch_localization
         self.patch_size = patch_size
-        self.polygoned = polygons
-        self.colorized_scar = colorized_scar
-        self.mode = mode
         
-                
         all_classes = np.array(get_all_subject_experiments('dataset/'))
         idx = np.where(all_classes == self.subject)
         self.classes = np.delete(all_classes, idx)
@@ -185,7 +190,7 @@ class PretextTaskDataset(Dataset):
             self.fixed_segmentation = obj_mask(temp)
         
         
-    def __getitem__(self, index):
+    def __getitem__(self, index:int):
         # load image
         original = Image.open(
             self.images_filenames[index])
@@ -239,23 +244,23 @@ class PretextTaskDataset(Dataset):
             
             # big defect (polygon)
             if y == 1:
-                if random.randint(0,1)==1:
-                    patch = generate_patch(
-                        image_for_cutting,
-                        area_ratio=CPP.rectangle_area_ratio,
-                        aspect_ratio=CPP.rectangle_aspect_ratio,
-                        augs=CPP.jitter_transforms
-                    )
-                else:
-                    patch = generate_patch(
-                        image_for_cutting,
-                        area_ratio=CPP.rectangle_area_ratio,
-                        aspect_ratio=CPP.rectangle_aspect_ratio,
-                        colorized=True,
-                        color_type='average'
-                    )
+                patch = generate_patch(
+                    image_for_cutting,
+                    area_ratio=CPP.rectangle_area_ratio,
+                    aspect_ratio=CPP.rectangle_aspect_ratio,
+                    augs=CPP.jitter_transforms,
+                    colorized=True,
+                    color_type='average'
+                )
+                patch2 = generate_patch(
+                    image_for_cutting,
+                    area_ratio=CPP.rectangle_area_ratio,
+                    aspect_ratio=CPP.rectangle_aspect_ratio,
+                    augs=CPP.jitter_transforms,
+                )
+                patch = random.choice([patch, patch2])
                 # check color similarity
-                if check_patch_and_defect_similarity(x, patch) > 0.99:
+                if check_color_similarity(x, patch) > 0.99:
                     low = np.random.uniform(0.3, 0.6)
                     high = np.random.uniform(1.2, 1.8)
                     patch = ImageEnhance.Brightness(patch).enhance(random.choice([low, high]))
@@ -271,23 +276,23 @@ class PretextTaskDataset(Dataset):
                 x = paste_patch(x, patch, coords, mask) 
             # small defect (scar)
             else:
-                if random.randint(0,1)==1:
-                    scar= generate_patch(
-                        image_for_cutting,
-                        area_ratio=CPP.scar_area_ratio,
-                        aspect_ratio=CPP.scar_aspect_ratio,
-                        augs=CPP.jitter_transforms
-                    )
-                else:
-                    scar= generate_patch(
-                        image_for_cutting,
-                        area_ratio=CPP.scar_area_ratio,
-                        aspect_ratio=CPP.scar_aspect_ratio,
-                        colorized=True,
-                        color_type='average'
-                    )
+                scar = generate_patch(
+                    image_for_cutting,
+                    area_ratio=CPP.scar_area_ratio,
+                    aspect_ratio=CPP.scar_aspect_ratio,
+                    augs=CPP.jitter_transforms,
+                    colorized=True,
+                    color_type='average'
+                )
+                scar2 = generate_patch(
+                    image_for_cutting,
+                    area_ratio=CPP.scar_area_ratio,
+                    aspect_ratio=CPP.scar_aspect_ratio,
+                    augs=CPP.jitter_transforms
+                )
+                scar = random.choice([scar, scar2])
                 # check color similarity
-                if check_patch_and_defect_similarity(x, scar) > 0.99:
+                if check_color_similarity(x, scar) > 0.99:
                     low = np.random.uniform(0.3, 0.5)
                     high = np.random.uniform(1.5, 1.7)
                     scar = ImageEnhance.Brightness(scar).enhance(random.choice([low, high]))
@@ -322,10 +327,8 @@ class PretextTaskDatamodule(pl.LightningDataModule):
             train_val_split:float=0.2,
             seed:int=0,
             min_dataset_length:int=1000,
-            duplication=False,
-            polygoned=False,
-            colorized_scar=False,
-            patch_localization=False,
+            duplication:bool=False,
+            patch_localization:bool=False,
             patch_size:tuple=64):
         
         super().__init__()
@@ -340,8 +343,6 @@ class PretextTaskDatamodule(pl.LightningDataModule):
         self.seed = seed
         self.min_dataset_length = min_dataset_length
         self.duplication = duplication
-        self.polygoned = polygoned
-        self.colorized_scar=colorized_scar
         self.patch_localization = patch_localization
         self.patch_size = patch_size
 
@@ -354,13 +355,13 @@ class PretextTaskDatamodule(pl.LightningDataModule):
 
 
     def prepare_filenames(self):
-        images_filenames = get_image_filenames(self.root_dir_train)
+        images_filenames = get_filenames(self.root_dir_train)
 
         train_images_filenames, val_images_filenames = tts(
             images_filenames, 
             test_size=self.train_val_split, 
             random_state=self.seed)
-        test_images_filenames = get_image_filenames(self.root_dir_test)
+        test_images_filenames = get_filenames(self.root_dir_test)
         
         if self.duplication:
             self.train_images_filenames = duplicate_filenames(
@@ -395,22 +396,16 @@ class PretextTaskDatamodule(pl.LightningDataModule):
                 self.val_images_filenames,
                 imsize=self.imsize,
                 transform=self.transform,
-                polygons=self.polygoned,
-                colorized_scar=self.colorized_scar,
                 patch_localization=self.patch_localization,
-                patch_size=self.patch_size,
-                mode='train')
+                patch_size=self.patch_size)
             
             self.val_dataset = PretextTaskDataset(
                 self.subject,
                 self.train_images_filenames,
                 imsize=self.imsize,
                 transform=self.transform,
-                polygons=self.polygoned,
-                colorized_scar=self.colorized_scar,
                 patch_localization=self.patch_localization,
-                patch_size=self.patch_size,
-                mode='test')
+                patch_size=self.patch_size)
             
         if stage == 'test' or stage is None:
             self.test_dataset = PretextTaskDataset(
@@ -418,11 +413,8 @@ class PretextTaskDatamodule(pl.LightningDataModule):
                 self.test_images_filenames,
                 imsize=self.imsize,
                 transform=self.transform,
-                polygons=self.polygoned,
-                colorized_scar=self.colorized_scar,
                 patch_localization=self.patch_localization,
-                patch_size=self.patch_size,
-                mode='test')
+                patch_size=self.patch_size)
 
 
     def train_dataloader(self):

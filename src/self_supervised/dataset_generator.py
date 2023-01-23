@@ -1,15 +1,13 @@
-import random
-from PIL import Image,ImageDraw, ImageFilter
-import numpy as np
+from PIL import Image,ImageDraw
 from skimage.morphology import square, label
 from sklearn.metrics.pairwise import cosine_similarity
-from skimage.segmentation import slic
-from skimage.measure import regionprops
-from skimage import color
 from skimage import feature
 from scipy import ndimage
 from scipy.ndimage import binary_dilation, binary_erosion, binary_closing
-import cv2
+from torchvision.transforms import ColorJitter
+from array import ArrayType
+import numpy as np
+import random
 
 
 
@@ -25,14 +23,7 @@ class Container:
         self.height = self.bottom - self.top
 
 
-def get_superpixels(image, segm):
-    image_array = np.array(image)
-    segments = slic(image_array, n_segments = segm, sigma = 5, convert2lab=True)
-    superpixels = color.label2rgb(segments, image_array, kind='avg')
-    return superpixels
-
-
-def obj_mask(image):
+def obj_mask(image:Image.Image):
     gray = np.array(image.convert('L'))
     edged_image = feature.canny(gray, sigma=1.5, low_threshold=5, high_threshold=15)
     structure = square(3)
@@ -47,7 +38,7 @@ def obj_mask(image):
     return Image.fromarray(edged_image).convert('RGB')
 
 
-def rect2poly(patch, regular:bool=False, sides:list=4):
+def rect2poly(patch:Image.Image, regular:bool=False, sides:list=4):
     width, height = patch.size
     mask = Image.new('RGBA', (patch.size), color=(0,0,0,0))
     draw = ImageDraw.Draw(mask)
@@ -152,7 +143,7 @@ def check_valid_coordinates_by_container(
     return (paste_left, paste_top), (center_x, center_y)
 
 
-def check_patch_and_defect_similarity(patch, defect):
+def check_color_similarity(patch:Image.Image, defect:Image.Image):
     imarray = np.array(patch)
     color = imarray.mean(axis=(0,1))
     rgb1 = (float(color[0]/255), float(color[1]/255), float(color[2]/255))
@@ -168,10 +159,10 @@ def check_patch_and_defect_similarity(patch, defect):
    
    
 def generate_patch(
-        image, 
+        image:Image.Image, 
         area_ratio:tuple=(0.02, 0.15), 
         aspect_ratio:tuple=((0.3, 1),(1, 3.3)),
-        augs=None,
+        augs:ColorJitter=None,
         colorized:bool=False,
         color_type:str='random'):
 
@@ -204,19 +195,19 @@ def generate_patch(
     else:
         cropped_patch = image.crop((patch_left, patch_top, patch_right, patch_bottom))
     
-    if augs and colorized==False:
+    if augs:
         cropped_patch = augs(cropped_patch)
     return cropped_patch
 
 
 def generate_scar(
-        image, 
+        image:Image.Image, 
         w_range:tuple=(2,16), 
         h_range:tuple=(10,25),  
         with_padding:bool=False,
         colorized:bool=False,
-        augs=None,
-        color_type='random'):
+        augs:ColorJitter=None,
+        color_type:str='random'):
     img_w, img_h = image.size
     right = 1
     left = 1
@@ -257,7 +248,7 @@ def generate_scar(
     return scar
 
 
-def get_random_coordinate(xy_coords):
+def get_random_coordinate(xy_coords:ArrayType):
     if len(xy_coords) == 0:
         return None
     elif len(xy_coords) < 2:
@@ -266,11 +257,12 @@ def get_random_coordinate(xy_coords):
     return xy_coords[idx]
 
 
-def paste_patch(image, patch, coords, mask=None, center:tuple=None, debug:bool=False):
+def paste_patch(
+        image:Image.Image, 
+        patch:Image.Image, 
+        coords:tuple, 
+        mask:Image.Image=None):
     aug_image = image.copy()
     aug_image.paste(patch, (coords[0], coords[1]), mask=mask)
-    if debug:
-        aug_image.paste(Image.new('RGB', (2,2), 'red'), (coords[0], coords[1]), None)
-        aug_image.paste(Image.new('RGB', (2,2), 'green'), (center[0], center[1]), None)
     return aug_image
 

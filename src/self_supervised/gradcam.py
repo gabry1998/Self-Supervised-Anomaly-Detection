@@ -1,5 +1,5 @@
 from self_supervised.models import PeraNet
-import torch
+from torch import Tensor
 import torch.nn.functional as F
 
 
@@ -22,7 +22,7 @@ class GradCam:
         target_layer.register_forward_hook(forward_hook)
         target_layer.register_backward_hook(backward_hook)
     
-    def compute_gradcam(self, input_tensor:torch.Tensor, class_idx=None):
+    def compute_gradcam(self, input_tensor:Tensor, class_idx=None):
         x = input_tensor.clone()
         b, c, h, w = x.size()
         out = self.localizer(x)

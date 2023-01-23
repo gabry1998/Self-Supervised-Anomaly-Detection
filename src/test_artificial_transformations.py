@@ -9,10 +9,8 @@ from torchvision import transforms
 from PIL import Image, ImageEnhance
 import matplotlib.pyplot as plt
 import numpy as np
-import time
 import os
 import collections
-import cv2 
 
 
 
@@ -22,23 +20,22 @@ def do_patch(img, image_for_cutting=None, segmentation=None, patch_loc=False):
     coordinates = np.flip(np.column_stack(np.where(segmentation == 1)), axis=1)
     coords = get_random_coordinate(coordinates)
     image_for_cutting = image_for_cutting.rotate(random.choice([90,180,270]))
-    if random.randint(0,1)==1:
-        patch = generate_patch(
-            image_for_cutting,
-            area_ratio=CPP.rectangle_area_ratio,
-            aspect_ratio=CPP.rectangle_aspect_ratio,
-            augs=CPP.jitter_transforms
-        )
-    else:
-        patch = generate_patch(
-            image_for_cutting,
-            area_ratio=CPP.rectangle_area_ratio,
-            aspect_ratio=CPP.rectangle_aspect_ratio,
-            colorized=True,
-            color_type='average'
-        )
-    
-    if check_patch_and_defect_similarity(img, patch) > 0.999:
+    patch = generate_patch(
+        image_for_cutting,
+        area_ratio=CPP.rectangle_area_ratio,
+        aspect_ratio=CPP.rectangle_aspect_ratio,
+        #augs=CPP.jitter_transforms,
+        colorized=True,
+        color_type='average'
+    )
+    patch2 = generate_patch(
+        image_for_cutting,
+        area_ratio=CPP.rectangle_area_ratio,
+        aspect_ratio=CPP.rectangle_aspect_ratio,
+        #augs=CPP.jitter_transforms,
+    )
+    patch = random.choice([patch, patch2])
+    if check_color_similarity(img, patch) > 0.999:
         low = np.random.uniform(0.5, 0.7)
         high = np.random.uniform(1.3, 1.5)
         patch = ImageEnhance.Brightness(patch).enhance(random.choice([low, high]))
@@ -65,9 +62,17 @@ def do_scar(img, image_for_cutting=None, segmentation=None, patch_loc=False):
         image_for_cutting,
         area_ratio=CPP.scar_area_ratio,
         aspect_ratio=CPP.scar_aspect_ratio,
-        augs=CPP.jitter_transforms
+        colorized=True,
+        color_type='average'
     )
-    if check_patch_and_defect_similarity(img, scar) > 0.999:
+    scar2 = generate_patch(
+        image_for_cutting,
+        area_ratio=CPP.scar_area_ratio,
+        aspect_ratio=CPP.scar_aspect_ratio,
+        #augs=CPP.jitter_transforms
+    )
+    scar = random.choice([scar, scar2])
+    if check_color_similarity(img, scar) > 0.999:
         low = np.random.uniform(0.3, 0.5)
         high = np.random.uniform(1.5, 1.7)
         scar = ImageEnhance.Brightness(scar).enhance(random.choice([low, high]))
@@ -141,6 +146,7 @@ def get_superpixels(image, segm):
     superpixels = color.label2rgb(segments, image_array, kind='avg')
     return superpixels
 
+
 def test_augmentations(patch_localization = False):
     imsize=(256,256)
     patchsize = 64
@@ -148,7 +154,7 @@ def test_augmentations(patch_localization = False):
     classes = get_all_subject_experiments('dataset/')
     for i in tqdm(range(len(subjects))):
         sub = subjects[i]
-        images = get_image_filenames('dataset/'+sub+'/train/good/')
+        images = get_filenames('dataset/'+sub+'/train/good/')
         goods = []
         masks = []
         patches = []
