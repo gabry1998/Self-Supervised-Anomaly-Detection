@@ -1,27 +1,37 @@
 import numpy as np
 import pytorch_lightning as pl
-from PIL import Image, ImageOps, ImageEnhance
-from skimage.segmentation import slic
-from skimage import color
+from PIL import Image, ImageEnhance
 from sklearn.model_selection import train_test_split as tts
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 from torchvision.transforms import Compose
-from .support import constants as CONST
-from .support.dataset_generator import *
-from .support.cutpaste_parameters import CPP
-from .support.functional import *
+from .dataset_generator import *
+from .functional import *
 
 
+class CPP:
+    jitter_offset = 0.1
+    
+    rectangle_area_ratio = (0.2, 0.3)
+    rectangle_aspect_ratio = ((0.3, 1),(1, 3.3))
+    
+    scar_area_ratio = (0.02, 0.05)
+    scar_aspect_ratio = ((0.1, 0.2),(3.1, 3.3))
 
-# dataset per le vere immagini mvtec
+    jitter_transforms = transforms.ColorJitter(
+                            brightness = jitter_offset,
+                            contrast = jitter_offset,
+                            saturation = jitter_offset,
+                            hue = jitter_offset)
+
+
 class MVTecDataset(Dataset):
     def __init__(
             self,
             dataset_dir:str,
             subject:str,
             images_filenames,
-            imsize:tuple=CONST.DEFAULT_IMSIZE(),
+            imsize:tuple=(256,256),
             transform:Compose=None,
             ) -> None:
         
@@ -35,10 +45,10 @@ class MVTecDataset(Dataset):
     def __getitem__(self, index):
         filename = self.images_filenames[index]
         x = Image.open(filename).resize(self.imsize).convert('RGB')
-        gt_filename = get_mvtec_gt_filename_counterpart(
+        gt_filename = get_ground_truth_filename(
             filename,
             self.dataset_dir+'ground_truth/')
-        gt = ground_truth(gt_filename, self.imsize)
+        gt = get_ground_truth(gt_filename, self.imsize)
         x_hat = x.copy()
         if self.transform:
             x_hat = self.transform(x)
@@ -54,9 +64,9 @@ class MVTecDatamodule(pl.LightningDataModule):
             self,
             root_dir:str, # something as ../dataset/bottle/
             subject:str,
-            imsize:tuple=CONST.DEFAULT_IMSIZE(),
-            batch_size:int=CONST.DEFAULT_BATCH_SIZE(),  
-            seed:int=CONST.DEFAULT_SEED(),
+            imsize:tuple=(256,256),
+            batch_size:int=32,  
+            seed:int=0,
             localization=False):
             
         super().__init__()
@@ -67,8 +77,10 @@ class MVTecDatamodule(pl.LightningDataModule):
         self.seed = seed
         self.localization = localization
 
-        #self.transform = transforms.ToTensor()
-        self.transform = CONST.DEFAULT_TRANSFORMS()
+        self.transform = self.transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+        ])
         
         self.train_images_filenames = get_image_filenames(self.root_dir+'/train/good/')
         self.test_images_filenames = get_mvtec_test_images(self.root_dir+'/test/')
@@ -133,8 +145,7 @@ class MVTecDatamodule(pl.LightningDataModule):
             num_workers=4)
  
 
-# avanti con questo tipo di dataset
-class PeraDataset(Dataset):
+class PretextTaskDataset(Dataset):
     def __init__(
             self,
             subject:str,
@@ -148,13 +159,9 @@ class PeraDataset(Dataset):
             mode:str='test' #test, train
             ) -> None:
 
-        super(PeraDataset).__init__()
+        super(PretextTaskDataset).__init__()
         self.subject = subject
         self.images_filenames = images_filenames
-        self.area_ratio = CPP.cutpaste_augmentations['patch']['area_ratio']
-        self.aspect_ratio = CPP.cutpaste_augmentations['patch']['aspect_ratio']
-        self.scar_width = CPP.cutpaste_augmentations['scar']['width']
-        self.scar_thiccness = CPP.cutpaste_augmentations['scar']['thiccness']
         
         self.imsize = imsize
         self.transform = transform
@@ -305,21 +312,21 @@ class PeraDataset(Dataset):
         return self.images_filenames.shape[0]
     
 
-class GenerativeDatamodule(pl.LightningDataModule):
+class PretextTaskDatamodule(pl.LightningDataModule):
     def __init__(
             self, 
             subject:str,
             root_dir:str, #qualcosa come ../dataset/bottle/
-            imsize:tuple=CONST.DEFAULT_IMSIZE(),
-            batch_size:int=CONST.DEFAULT_BATCH_SIZE(),  
-            train_val_split:float=CONST.DEFAULT_TRAIN_VAL_SPLIT(),
-            seed:int=CONST.DEFAULT_SEED(),
+            imsize:tuple=(256,256),
+            batch_size:int=32,  
+            train_val_split:float=0.2,
+            seed:int=0,
             min_dataset_length:int=1000,
             duplication=False,
             polygoned=False,
             colorized_scar=False,
             patch_localization=False,
-            patch_size:tuple=CONST.DEFAULT_PATCH_SIZE()):
+            patch_size:tuple=64):
         
         super().__init__()
         self.save_hyperparameters()
@@ -338,8 +345,10 @@ class GenerativeDatamodule(pl.LightningDataModule):
         self.patch_localization = patch_localization
         self.patch_size = patch_size
 
-        self.transform = CONST.DEFAULT_TRANSFORMS()
-        #self.transform = transforms.ToTensor()
+        self.transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+        ])
         
         self.prepare_filenames()
 
@@ -381,8 +390,7 @@ class GenerativeDatamodule(pl.LightningDataModule):
     
     def setup(self, stage:str=None) -> None:
         if stage == 'fit' or stage is None:
-            #self.train_dataset = GenerativeDataset(
-            self.train_dataset = PeraDataset(
+            self.train_dataset = PretextTaskDataset(
                 self.subject,
                 self.val_images_filenames,
                 imsize=self.imsize,
@@ -393,8 +401,7 @@ class GenerativeDatamodule(pl.LightningDataModule):
                 patch_size=self.patch_size,
                 mode='train')
             
-            #self.val_dataset = GenerativeDataset(
-            self.val_dataset = PeraDataset(
+            self.val_dataset = PretextTaskDataset(
                 self.subject,
                 self.train_images_filenames,
                 imsize=self.imsize,
@@ -406,8 +413,7 @@ class GenerativeDatamodule(pl.LightningDataModule):
                 mode='test')
             
         if stage == 'test' or stage is None:
-            #self.test_dataset = GenerativeDataset(
-            self.test_dataset = PeraDataset(
+            self.test_dataset = PretextTaskDataset(
                 self.subject,
                 self.test_images_filenames,
                 imsize=self.imsize,

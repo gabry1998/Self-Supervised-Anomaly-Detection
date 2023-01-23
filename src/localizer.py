@@ -3,10 +3,11 @@ from tqdm import tqdm
 from self_supervised.gradcam import GradCam
 from torchvision import transforms
 from torchvision.transforms import functional
-from self_supervised.support.functional import *
-from self_supervised.support.visualization import *
+from self_supervised.functional import *
+from self_supervised.converters import *
+from self_supervised.visualization import *
 import self_supervised.datasets as dt
-import self_supervised.model as md
+import self_supervised.models as md
 import random
 import os
 import torch

@@ -1,10 +1,10 @@
 from tqdm import tqdm
 from skimage.segmentation import slic
 from skimage import color
-from self_supervised.support.dataset_generator import *
-from self_supervised.support.functional import *
-from self_supervised.datasets import GenerativeDatamodule
-from self_supervised.support.cutpaste_parameters import CPP
+from self_supervised.dataset_generator import *
+from self_supervised.functional import *
+from self_supervised.converters import *
+from self_supervised.datasets import PretextTaskDatamodule, CPP
 from torchvision import transforms
 from PIL import Image, ImageEnhance
 import matplotlib.pyplot as plt
@@ -259,7 +259,7 @@ def check_all_subject(patch_localization = False):
 
 
 def check_distribution():
-    artificial = GenerativeDatamodule(
+    artificial = PretextTaskDatamodule(
         'bottle',
         'dataset/bottle/',
         (256,256),
@@ -290,10 +290,11 @@ def check_distribution():
     plt.ylabel('Frequency', fontdict=font)
     plt.xticks([0,1,2], ['good', 'polygon patch','scar'], font=font)
     plt.savefig('distribution.png', bbox_inches='tight')
-    
-test_augmentations(True)
-check_all_subject(True)
-#check_distribution()
+
+if __name__ == "__main__":
+    test_augmentations(True)
+    check_all_subject(True)
+    #check_distribution()
 
 
 

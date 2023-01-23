@@ -1,17 +1,18 @@
 import shutil
 from self_supervised.gradcam import GradCam
-from self_supervised.model import GDE, AnomalyDetector, PeraNet
-from self_supervised.datasets import MVTecDatamodule, GenerativeDatamodule
+from self_supervised.models import GDE, AnomalyDetector, PeraNet
+from self_supervised.datasets import MVTecDatamodule, PretextTaskDatamodule
 from tqdm import tqdm
 from torchvision import transforms
 from torchvision.transforms import functional
 from torch import Tensor
 from skimage.segmentation import slic
 from skimage import color
-import self_supervised.support.constants as CONST
-from self_supervised.support.functional import \
-    extract_patches, get_all_subject_experiments, get_prediction_class, gt2label, heatmap2mask, multiclass2binary, normalize
-import self_supervised.support.visualization as vis
+from self_supervised.functional import \
+    extract_patches, get_all_subject_experiments, get_prediction_class, normalize
+from self_supervised.converters import \
+    gt2label, heatmap2mask, multiclass2binary
+import self_supervised.visualization as vis
 import self_supervised.metrics as mtr
 import time
 import random
@@ -68,7 +69,7 @@ class Evaluator:
         
         self.imsize = imsize
         
-        self.artificial_datamodule = GenerativeDatamodule(
+        self.artificial_datamodule = PretextTaskDatamodule(
         self.subject,
         self.dataset_dir+self.subject+'/',
         imsize=imsize,

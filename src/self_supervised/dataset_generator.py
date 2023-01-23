@@ -166,6 +166,7 @@ def check_patch_and_defect_similarity(patch, defect):
     out = cosine_similarity(v1, v2)
     return out.squeeze()
    
+   
 def generate_patch(
         image, 
         area_ratio:tuple=(0.02, 0.15), 
@@ -206,12 +207,6 @@ def generate_patch(
     if augs and colorized==False:
         cropped_patch = augs(cropped_patch)
     return cropped_patch
-
-
-def pad(img, padding:int=6):    
-    pd = Image.new('RGBA', (img.size[0]+padding, img.size[1]+padding), (0,0,0,0))
-    pd.paste(img, (int(padding/2),int(padding/2)))
-    return pd
 
 
 def generate_scar(

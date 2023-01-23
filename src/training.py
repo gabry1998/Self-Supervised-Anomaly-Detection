@@ -1,9 +1,9 @@
 import shutil
-from self_supervised.datasets import GenerativeDatamodule
-from self_supervised.support import constants as CONST
-from self_supervised.model import PeraNet, MetricTracker
-from self_supervised.support.functional import get_all_subject_experiments
-from self_supervised.support.visualization import plot_history
+from self_supervised.datasets import PretextTaskDatamodule
+from self_supervised.models import PeraNet
+from self_supervised.custom_callbacks import MetricTracker
+from self_supervised.functional import get_all_subject_experiments
+from self_supervised.visualization import plot_history
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from tqdm import tqdm
 import pytorch_lightning as pl
@@ -45,15 +45,15 @@ def training_pipeline(
         dataset_dir:str, 
         root_outputs_dir:str, 
         subject:str,
-        imsize:tuple=CONST.DEFAULT_IMSIZE(),
+        imsize:tuple=(256,256),
         polygoned=False,
         colorized_scar=False,
         patch_localization:bool=False,
-        batch_size:int=CONST.DEFAULT_BATCH_SIZE(),
-        train_val_split:float=CONST.DEFAULT_TRAIN_VAL_SPLIT(),
-        seed:int=CONST.DEFAULT_SEED(),
-        projection_training_lr:float=CONST.DEFAULT_LEARNING_RATE(),
-        projection_training_epochs:int=CONST.DEFAULT_EPOCHS(),
+        batch_size:int=32,
+        train_val_split:float=0.2,
+        seed:int=0,
+        projection_training_lr:float=0.03,
+        projection_training_epochs:int=30,
         fine_tune_lr:float=0.001,
         fine_tune_epochs:int=20):
     
@@ -80,7 +80,7 @@ def training_pipeline(
     random.seed(seed)
     
     print('>>> preparing datamodule')
-    datamodule = GenerativeDatamodule(
+    datamodule = PretextTaskDatamodule(
         subject,
         dataset_dir+subject+'/',
         imsize=imsize,
@@ -96,8 +96,7 @@ def training_pipeline(
     datamodule.setup()
     pretext_model = PeraNet(
         latent_space_layers=3,
-        #latent_space_dims=[512,512,512,512],
-        #latent_space_dims=[512,512,512,512,512,512,512,512,512],
+        #latent_space_layers=9,
         num_classes=3, lr=projection_training_lr, num_epochs=projection_training_epochs)
     pretext_model.freeze_net(['backbone'])
     trainer, cb = get_trainer(0.8, projection_training_epochs, min_epochs=3, log_dir=result_path+'logs/')
@@ -126,15 +125,15 @@ def run(
         experiments_list:list,
         dataset_dir:str, 
         root_outputs_dir:str,
-        imsize:tuple=CONST.DEFAULT_IMSIZE(),
+        imsize:tuple=(256,256),
         polygoned=True,
         colorized_scar=False,
         patch_localization:bool=False,
-        batch_size:int=CONST.DEFAULT_BATCH_SIZE(),
-        train_val_split:float=CONST.DEFAULT_TRAIN_VAL_SPLIT(),
-        seed:int=CONST.DEFAULT_SEED(),
-        projection_training_lr:float=CONST.DEFAULT_LEARNING_RATE(),
-        projection_training_epochs:int=CONST.DEFAULT_EPOCHS(),
+        batch_size:int=32,
+        train_val_split:float=0.2,
+        seed:int=0,
+        projection_training_lr:float=0.03,
+        projection_training_epochs:int=30,
         fine_tune_lr:float=0.001,
         fine_tune_epochs:int=20):
     

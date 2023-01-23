@@ -1,8 +1,7 @@
 from tqdm import tqdm
-from self_supervised.support.dataset_generator import *
-from self_supervised.support.functional import *
-from self_supervised.datasets import GenerativeDatamodule
-from self_supervised.support.cutpaste_parameters import CPP
+from self_supervised.dataset_generator import *
+from self_supervised.functional import *
+from self_supervised.datasets import CPP
 from torchvision import transforms
 from PIL import Image, ImageFilter
 import matplotlib.pyplot as plt

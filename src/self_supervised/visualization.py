@@ -2,7 +2,8 @@ from sklearn.metrics import roc_curve, auc
 from torch import Tensor
 from sklearn.manifold import TSNE
 from PIL import Image, ImageFilter
-from self_supervised.support.functional import imagetensor2array, normalize
+from self_supervised.functional import normalize
+from self_supervised.converters import imagetensor2array
 from torchvision import transforms
 import matplotlib.pyplot as plt
 import cv2
@@ -11,7 +12,6 @@ import numpy as np
 import pandas as pd
 import torch
 import os
-
 
 
 
@@ -45,6 +45,7 @@ def plot_history(network_history, saving_path=None, mode='training'):
         plt.savefig(mode+'_accuracy.png')
     plt.show()
     plt.close()
+
 
 def plot_curve(fpr, tpr, area, saving_path:str=None, title:str='', name:str='curve.png'):
     if saving_path and not os.path.exists(saving_path):
@@ -103,6 +104,7 @@ def plot_tsne(embeddings:Tensor, labels:Tensor, saving_path:str=None, title:str=
         plt.savefig(name)
     plt.close()
 
+
 def plot_heatmap(image, heatmap, saving_path:str=None, name:str='gradcam.png'):
     if saving_path and not os.path.exists(saving_path):
         os.makedirs(saving_path)
@@ -160,6 +162,7 @@ def plot_heatmap_and_masks(
     else:
         plt.savefig(name, bbox_inches='tight')
     plt.close()
+
 
 def apply_heatmap(image:Tensor, heatmap:Tensor):
     #image is (1, 3, H, W)

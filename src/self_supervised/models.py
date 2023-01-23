@@ -1,11 +1,6 @@
-import random
-from sklearn.cluster import AffinityPropagation
-from sklearn.covariance import LedoitWolf
 from sklearn.neighbors import KernelDensity, NearestNeighbors
-from sklearn.metrics.pairwise import cosine_similarity
 from torch import nn
 from torchsummary import summary as torch_summary
-from numpy import linalg as LA
 import torch
 from torchvision import models
 import pytorch_lightning as pl
@@ -13,7 +8,10 @@ import torch.nn.functional as F
 from torchmetrics.functional import accuracy
 import numpy as np
 from torch import Tensor
-from self_supervised.support.functional import get_prediction_class, gt2label, normalize
+from self_supervised.converters import gt2label
+from self_supervised.functional import get_prediction_class
+
+
 
 
 class PeraNet(pl.LightningModule):
@@ -333,29 +331,7 @@ class PeraNet(pl.LightningModule):
         scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, self.num_epochs)
         return [optimizer], [scheduler]
 
-    
-class MetricTracker(pl.Callback):
-  def __init__(self):
-    
-    self.log_metrics = {
-        'train':{
-            'accuracy':[],
-            'loss':[]
-        },
-        'val':{
-            'accuracy':[],
-            'loss':[]
-        }
-    }
-
-  def on_train_epoch_end(self, trainer, pl_module):
-    elogs = trainer.logged_metrics
-    self.log_metrics['train']['accuracy'].append(elogs['train_accuracy'].item())
-    self.log_metrics['train']['loss'].append(elogs['train_loss'].item())
-    self.log_metrics['val']['accuracy'].append(elogs['val_accuracy'].item())
-    self.log_metrics['val']['loss'].append(elogs['val_loss'].item())
-
-
+ 
 class GDE():
     def __init__(self) -> None:
         pass
