@@ -6,7 +6,7 @@ from self_supervised.functional import *
 from self_supervised.converters import *
 from self_supervised.datasets import PretextTaskDatamodule, CPP
 from torchvision import transforms
-from PIL import Image, ImageEnhance
+from PIL import Image, ImageEnhance, ImageFilter
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -20,7 +20,13 @@ def do_patch(img, image_for_cutting=None, segmentation=None, patch_loc=False):
     coordinates = np.flip(np.column_stack(np.where(segmentation == 1)), axis=1)
     coords = get_random_coordinate(coordinates)
     image_for_cutting = image_for_cutting.rotate(random.choice([90,180,270]))
-    patch = generate_patch(
+    a = generate_patch(
+        image_for_cutting,
+        area_ratio=CPP.rectangle_area_ratio,
+        aspect_ratio=CPP.rectangle_aspect_ratio,
+        #augs=CPP.jitter_transforms,
+    )
+    b = generate_patch(
         image_for_cutting,
         area_ratio=CPP.rectangle_area_ratio,
         aspect_ratio=CPP.rectangle_aspect_ratio,
@@ -28,18 +34,12 @@ def do_patch(img, image_for_cutting=None, segmentation=None, patch_loc=False):
         colorized=True,
         color_type='average'
     )
-    patch2 = generate_patch(
-        image_for_cutting,
-        area_ratio=CPP.rectangle_area_ratio,
-        aspect_ratio=CPP.rectangle_aspect_ratio,
-        #augs=CPP.jitter_transforms,
-    )
-    patch = random.choice([patch, patch2])
+    patch = random.choice([a])
     if check_color_similarity(img, patch) > 0.999:
         low = np.random.uniform(0.5, 0.7)
         high = np.random.uniform(1.3, 1.5)
         patch = ImageEnhance.Brightness(patch).enhance(random.choice([low, high]))
-    coords, _ = check_valid_coordinates_by_container(
+    coords = check_valid_coordinates_by_container(
         img.size, 
         patch.size, 
         current_coords=coords,
@@ -47,7 +47,7 @@ def do_patch(img, image_for_cutting=None, segmentation=None, patch_loc=False):
     )
     mask = None
     mask = rect2poly(patch, regular=False, sides=8)
-    
+    #mask = mask.filter(ImageFilter.GaussianBlur(1))
     x = paste_patch(img, patch, coords, mask)
     return x
 
@@ -65,13 +65,6 @@ def do_scar(img, image_for_cutting=None, segmentation=None, patch_loc=False):
         colorized=True,
         color_type='average'
     )
-    scar2 = generate_patch(
-        image_for_cutting,
-        area_ratio=CPP.scar_area_ratio,
-        aspect_ratio=CPP.scar_aspect_ratio,
-        #augs=CPP.jitter_transforms
-    )
-    scar = random.choice([scar, scar2])
     if check_color_similarity(img, scar) > 0.999:
         low = np.random.uniform(0.3, 0.5)
         high = np.random.uniform(1.5, 1.7)
@@ -79,14 +72,15 @@ def do_scar(img, image_for_cutting=None, segmentation=None, patch_loc=False):
     angle = random.randint(-45,45)
     scar = scar.convert('RGBA')
     scar = scar.rotate(angle, expand=True)
-    coords, _ = check_valid_coordinates_by_container(
+    coords = check_valid_coordinates_by_container(
         img.size, 
         scar.size, 
         current_coords=coords,
         container_scaling_factor=factor
     )
-    
+    #scar = scar.filter(ImageFilter.GaussianBlur(1))
     x = paste_patch(img, scar, coords, scar)
+    
     return x
 
 
@@ -195,6 +189,9 @@ def test_augmentations(patch_localization = False):
             else:
                 patch = x.copy()
                 scar = x.copy()
+            x = CPP.jitter_transforms(x)
+            patch = CPP.jitter_transforms(patch)
+            scar = CPP.jitter_transforms(scar)
             goods.append(np.array(x))
             patches.append(np.array(patch))
             scars.append(np.array(scar))
@@ -251,6 +248,9 @@ def check_all_subject(patch_localization = False):
         else:
             patch = x.copy()
             scar = x.copy()
+        x = CPP.jitter_transforms(x)
+        patch = CPP.jitter_transforms(patch)
+        scar = CPP.jitter_transforms(scar)
         goods.append(np.array(x))
         patches.append(np.array(patch))
         scars.append(np.array(scar))

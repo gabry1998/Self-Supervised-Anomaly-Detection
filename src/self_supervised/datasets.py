@@ -1,4 +1,4 @@
-from PIL import Image, ImageEnhance
+from PIL import Image, ImageEnhance, ImageFilter
 from sklearn.model_selection import train_test_split as tts
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
@@ -18,6 +18,7 @@ from self_supervised.functional import \
     get_filenames, \
     get_test_data_filenames
 from numpy import ndarray
+from self_supervised import constants
 import random
 import torch
 import numpy as np
@@ -27,39 +28,40 @@ import pytorch_lightning as pl
 class CPP:
     jitter_offset = 0.1
     
-    rectangle_area_ratio = (0.2, 0.3)
-    rectangle_aspect_ratio = ((0.3, 1),(1, 3.3))
+    rectangle_area_ratio = (0.1, 0.5)
+    rectangle_aspect_ratio = ((0.1, 1),(1, 3.3))
     
-    scar_area_ratio = (0.02, 0.05)
+    scar_area_ratio = (0.01, 0.05)
     scar_aspect_ratio = ((0.1, 1),(1, 3.3))
 
     jitter_transforms = transforms.ColorJitter(
                             brightness = jitter_offset,
                             contrast = jitter_offset,
-                            saturation = jitter_offset,
-                            hue = jitter_offset)
+                            saturation = jitter_offset)
+                            #hue = jitter_offset)
 
 
 class MVTecDataset(Dataset):
     def __init__(
             self,
             dataset_dir:str,
-            subject:str,
             images_filenames:list,
             imsize:tuple=(256,256),
             transform:Compose=None,
-            ) -> None:
+            subject=None) -> None:
         
         super().__init__()
         self.dataset_dir = dataset_dir
-        self.subject = subject
         self.images_filenames = images_filenames
         self.imsize = imsize
         self.transform = transform
+        self.subject = subject
+            
     
     def __getitem__(self, index):
         filename = self.images_filenames[index]
         x = Image.open(filename).resize(self.imsize).convert('RGB')
+        
         gt_filename = get_ground_truth_filename(
             filename,
             self.dataset_dir+'ground_truth/')
@@ -68,7 +70,9 @@ class MVTecDataset(Dataset):
         if self.transform:
             x_hat = self.transform(x)
         gt = transforms.ToTensor()(gt)
+        
         return x_hat, gt, transforms.ToTensor()(x)
+        
         
     def __len__(self):
         return self.images_filenames.shape[0]
@@ -78,19 +82,18 @@ class MVTecDatamodule(pl.LightningDataModule):
     def __init__(
             self,
             root_dir:str, # something as ../dataset/bottle/
-            subject:str,
             imsize:tuple=(256,256),
             batch_size:int=32,  
-            seed:int=0):
+            seed:int=0,
+            subject=None):
             
         super().__init__()
         self.root_dir = root_dir
-        self.subject = subject
         self.imsize = imsize
         self.batch_size = batch_size
         self.seed = seed
-
-        self.transform = self.transform = transforms.Compose([
+        self.subject = subject
+        self.transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
         ])
@@ -107,40 +110,40 @@ class MVTecDatamodule(pl.LightningDataModule):
         
         self.train_dataset = MVTecDataset(
             self.root_dir,
-            self.subject,
             train_images_filenames,
             imsize=self.imsize,
-            transform=self.transform
+            transform=self.transform,
+            subject=self.subject
         )
         self.val_dataset = MVTecDataset(
             self.root_dir,
-            self.subject,
             val_images_filenames,
             imsize=self.imsize,
-            transform=self.transform
+            transform=self.transform,
+            subject=self.subject
         )
         self.test_dataset = MVTecDataset(
             self.root_dir,
-            self.subject,
             self.test_images_filenames,
             imsize=self.imsize,
-            transform=self.transform
+            transform=self.transform,
+            subject=self.subject
         )
-    
-    
+     
+     
     def train_dataloader(self):
         return DataLoader(
             self.train_dataset, 
             batch_size=self.batch_size, 
             shuffle=True,
-            num_workers=4)
+            num_workers=8)
     
     def val_dataloader(self):
         return DataLoader(
             self.val_dataset, 
             batch_size=self.batch_size, 
             shuffle=False,
-            num_workers=4)
+            num_workers=8)
     
     
     def test_dataloader(self):
@@ -148,14 +151,14 @@ class MVTecDatamodule(pl.LightningDataModule):
             self.test_dataset, 
             batch_size=self.batch_size, 
             shuffle=False,
-            num_workers=4)
+            num_workers=8)
     
     def predict_dataloader(self):
         return DataLoader(
             self.test_dataset, 
             batch_size=self.batch_size, 
             shuffle=False,
-            num_workers=4)
+            num_workers=8)
  
 
 class PretextTaskDataset(Dataset):
@@ -183,7 +186,7 @@ class PretextTaskDataset(Dataset):
         
         # create a single mask for position-fixed object
         # textures just have a white image
-        if self.subject in np.array(['carpet','grid','leather','tile','wood']):
+        if self.subject in constants.TEXTURES():
             self.fixed_segmentation = Image.new(size=imsize, mode='RGB', color='white')
         else:
             temp = Image.open('dataset/'+self.subject+'/train/good/000.png').resize(imsize).convert('RGB')
@@ -200,7 +203,7 @@ class PretextTaskDataset(Dataset):
         # copy original for second use
         x = original.copy()
         # get image to crop for artificial defect
-        if self.subject in np.array(['carpet','grid','leather','tile','wood']):
+        if self.subject in constants.TEXTURES():
             random_subject = random.choice(self.classes)
             image_for_cutting = Image.open(
                 'dataset/'+random_subject+'/train/good/000.png'
@@ -210,11 +213,10 @@ class PretextTaskDataset(Dataset):
         
         
         # create new masks only for non-fixed objects
-        if self.subject in np.array(['hazelnut', 'screw', 'metal_nut']):
+        if self.subject in constants.NON_FIXED_OBJECTS():
             segmentation = obj_mask(original)
         else:
             segmentation = self.fixed_segmentation
-        
         # container dims
         container_scaling_factor_patch = 2
         container_scaling_factor_scar = 2.5
@@ -232,8 +234,6 @@ class PretextTaskDataset(Dataset):
             # check working area sizes
             if torch.sum(transforms.ToTensor()(segmentation)) < int((self.patch_size*self.patch_size)/2):
                y = 0
-        # apply jittering
-        x = CPP.jitter_transforms(x)
         
         if y > 0:
             # get coordinate map
@@ -244,27 +244,32 @@ class PretextTaskDataset(Dataset):
             
             # big defect (polygon)
             if y == 1:
-                patch = generate_patch(
+                a = generate_patch(
                     image_for_cutting,
                     area_ratio=CPP.rectangle_area_ratio,
                     aspect_ratio=CPP.rectangle_aspect_ratio,
-                    augs=CPP.jitter_transforms,
+                )
+                b = generate_patch(
+                    image_for_cutting,
+                    area_ratio=CPP.rectangle_area_ratio,
+                    aspect_ratio=CPP.rectangle_aspect_ratio,
                     colorized=True,
                     color_type='average'
                 )
-                patch2 = generate_patch(
+                c = generate_patch(
                     image_for_cutting,
                     area_ratio=CPP.rectangle_area_ratio,
                     aspect_ratio=CPP.rectangle_aspect_ratio,
-                    augs=CPP.jitter_transforms,
+                    colorized=True,
+                    color_type='random'
                 )
-                patch = random.choice([patch, patch2])
+                patch = random.choice([a,b,c])
                 # check color similarity
                 if check_color_similarity(x, patch) > 0.99:
                     low = np.random.uniform(0.3, 0.6)
                     high = np.random.uniform(1.2, 1.8)
                     patch = ImageEnhance.Brightness(patch).enhance(random.choice([low, high]))
-                coords, _ = check_valid_coordinates_by_container(
+                coords = check_valid_coordinates_by_container(
                         x.size, 
                         patch.size, 
                         current_coords=coords,
@@ -272,25 +277,30 @@ class PretextTaskDataset(Dataset):
                     )
                 mask = None
                 mask = rect2poly(patch, regular=False, sides=8)
-                
+                #mask = mask.filter(ImageFilter.GaussianBlur(1))
                 x = paste_patch(x, patch, coords, mask) 
             # small defect (scar)
             else:
-                scar = generate_patch(
+                a = generate_patch(
+                    image_for_cutting,
+                    area_ratio=CPP.scar_area_ratio,
+                    aspect_ratio=CPP.scar_aspect_ratio
+                )
+                b = generate_patch(
                     image_for_cutting,
                     area_ratio=CPP.scar_area_ratio,
                     aspect_ratio=CPP.scar_aspect_ratio,
-                    augs=CPP.jitter_transforms,
                     colorized=True,
                     color_type='average'
                 )
-                scar2 = generate_patch(
+                c = generate_patch(
                     image_for_cutting,
                     area_ratio=CPP.scar_area_ratio,
                     aspect_ratio=CPP.scar_aspect_ratio,
-                    augs=CPP.jitter_transforms
+                    colorized=True,
+                    color_type='random'
                 )
-                scar = random.choice([scar, scar2])
+                #scar = random.choice([c])
                 # check color similarity
                 if check_color_similarity(x, scar) > 0.99:
                     low = np.random.uniform(0.3, 0.5)
@@ -300,17 +310,19 @@ class PretextTaskDataset(Dataset):
                 scar = scar.convert('RGBA')
                 scar = scar.rotate(angle, expand=True)
                 
-                coords, _ = check_valid_coordinates_by_container(
+                coords = check_valid_coordinates_by_container(
                     x.size, 
                     scar.size, 
                     current_coords=coords,
                     container_scaling_factor=container_scaling_factor_scar
                 )
+                #scar = scar.filter(ImageFilter.GaussianBlur(1))
                 x = paste_patch(x, scar, coords, scar)
-        
+        # apply jittering
+        x = CPP.jitter_transforms(x)
         if self.transform:
             x = self.transform(x)
-        return x, y, transforms.ToTensor()(original) 
+        return x, y, transforms.ToTensor()(original)
     
     
     def __len__(self):
@@ -423,6 +435,7 @@ class PretextTaskDatamodule(pl.LightningDataModule):
             batch_size=self.batch_size, 
             shuffle=False,
             drop_last=True,
+            pin_memory=True,
             num_workers=8)
 
 
@@ -432,6 +445,7 @@ class PretextTaskDatamodule(pl.LightningDataModule):
             batch_size=self.batch_size, 
             shuffle=False,
             drop_last=True,
+            pin_memory=True,
             num_workers=8)
     
     

@@ -84,7 +84,6 @@ class Evaluator:
         
         self.mvtec_datamodule = MVTecDatamodule(
             root_dir=self.dataset_dir+self.subject+'/',
-            subject=self.subject,
             imsize=imsize,
             batch_size=batch_size
         )
@@ -246,7 +245,7 @@ class Evaluator:
             all_pros,
             au_pro,
             saving_path=self.outputs_dir,
-            title='Pro curve for '+self.subject.upper()+' ['+str(seed)+']',
+            title='Pro curve for '+self.subject.upper()+' ['+str(self.seed)+']',
             name='pro.png'
         )
         
@@ -294,29 +293,23 @@ def obj_set_two():
         'toothbrush',
         'transistor',
         'zipper']
-    
-    
-if __name__ == "__main__":
+
+
+def evaluate(
+        dataset_dir='dataset/',
+        root_inputs_dir='brutta_brutta_copia/computations/',
+        root_outputs_dir='brutta_brutta_copia/computations/',
+        imsize=(256,256),
+        patch_dim = 32,
+        stride=8,
+        seed=123456789,
+        patch_localization=True,
+        experiments_list=[]
+        ):
     metric_dict={}
-    dataset_dir='dataset/'
-    root_inputs_dir='brutta_brutta_copia/computations/'
-    root_outputs_dir='brutta_brutta_copia/computations/'
-    imsize=(256,256)
-    patch_dim = 32
-    stride=8
-    seed=123456789
-    patch_localization=True
-      
-    experiments = get_all_subject_experiments('dataset/')
-    textures = get_textures_names()
-    obj1 = obj_set_one()
-    obj2 = obj_set_two()
-    experiments_list = ['bottle']
-    
     image_aurocs = []
     pixel_aurocs = []
     aupros = []
-    
     pbar = tqdm(range(len(experiments_list)), position=0, leave=False)
     for i in pbar:
         pbar.set_description('Evaluation pipeline | current subject is '+experiments_list[i].upper())
@@ -353,3 +346,24 @@ if __name__ == "__main__":
     
     report = mtr.metrics_to_dataframe(metric_dict, np.array(experiments_list))
     mtr.export_dataframe(report, saving_path=root_outputs_dir, name='patch_level_scores.csv')
+    return report
+    
+    
+if __name__ == "__main__":
+    experiments = get_all_subject_experiments('dataset/')
+    textures = get_textures_names()
+    obj1 = obj_set_one()
+    obj2 = obj_set_two()
+    experiments_list = obj1
+    
+    report = evaluate(
+        dataset_dir='dataset/',
+        root_inputs_dir='brutta_copia/computations/',
+        root_outputs_dir='brutta_copia/computations/',
+        imsize=(256,256),
+        patch_dim = 32,
+        stride=8,
+        seed=123456789,
+        patch_localization=True,
+        experiments_list=experiments_list
+    )

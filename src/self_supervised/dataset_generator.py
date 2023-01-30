@@ -6,6 +6,7 @@ from scipy import ndimage
 from scipy.ndimage import binary_dilation, binary_erosion, binary_closing
 from torchvision.transforms import ColorJitter
 from array import ArrayType
+from typing import Tuple
 import numpy as np
 import random
 
@@ -23,7 +24,7 @@ class Container:
         self.height = self.bottom - self.top
 
 
-def obj_mask(image:Image.Image):
+def obj_mask(image:Image.Image) -> Image.Image:
     gray = np.array(image.convert('L'))
     edged_image = feature.canny(gray, sigma=1.5, low_threshold=5, high_threshold=15)
     structure = square(3)
@@ -116,34 +117,34 @@ def check_valid_coordinates_by_container(
         center_y = current_coords[1]
 
     # we have (x, y); PIL paste() requires (left, top)
-    paste_left = center_x - int(patchsize[0]/2)
-    paste_top = center_y - int(patchsize[1]/2)
-    paste_right = center_x + int(patchsize[0]/2)
-    paste_bottom = center_y + int(patchsize[1]/2)
+    paste_left:int = center_x - int(patchsize[0]/2)
+    paste_top:int = center_y - int(patchsize[1]/2)
+    paste_right:int = center_x + int(patchsize[0]/2)
+    paste_bottom:int = center_y + int(patchsize[1]/2)
     
     # check defect bounding box (left, top, right, bottom) is in container, and update (left, top)
     
     #right point
     if paste_right > container.right:
-        paste_left = container.right - defect_width
-        center_x = paste_right - int(defect_width/2)
+        paste_left:int = container.right - defect_width
+        center_x:int = paste_right - int(defect_width/2)
     #bottom point
     if paste_bottom > container.bottom:
-        paste_top = container.bottom - defect_height
-        center_y = paste_bottom - int(defect_height/2)
+        paste_top:int = container.bottom - defect_height
+        center_y:int = paste_bottom - int(defect_height/2)
     # left point
     if paste_left < container.left:
-        paste_left = container.left
-        center_x = container.left + int(defect_width/2)
+        paste_left:int = container.left
+        center_x:int = container.left + int(defect_width/2)
     # top point
     if paste_top < container.top:
-        paste_top = container.top
-        center_y = container.top + int(defect_height/2)
+        paste_top:int = container.top
+        center_y:int = container.top + int(defect_height/2)
         
-    return (paste_left, paste_top), (center_x, center_y)
+    return (paste_left, paste_top)
 
 
-def check_color_similarity(patch:Image.Image, defect:Image.Image):
+def check_color_similarity(patch:Image.Image, defect:Image.Image) -> float:
     imarray = np.array(patch)
     color = imarray.mean(axis=(0,1))
     rgb1 = (float(color[0]/255), float(color[1]/255), float(color[2]/255))
@@ -164,17 +165,27 @@ def generate_patch(
         aspect_ratio:tuple=((0.3, 1),(1, 3.3)),
         augs:ColorJitter=None,
         colorized:bool=False,
-        color_type:str='random'):
+        color_type:str='random') -> Image.Image:
 
     img_area = image.size[0] * image.size[1]
     patch_area = random.uniform(area_ratio[0], area_ratio[1]) * img_area
     patch_aspect = random.choice([random.uniform(*aspect_ratio[0]), random.uniform(*aspect_ratio[1])])
     patch_w  = int(np.sqrt(patch_area*patch_aspect))
     patch_h = int(np.sqrt(patch_area/patch_aspect))
+    if patch_w < 2:
+        patch_w = 2
+    if patch_h < 2:
+        patch_h = 2
     org_w, org_h = image.size
 
     # parte da tagliare
-    patch_left, patch_top = random.randint(0, org_w - patch_w), random.randint(0, org_h - patch_h)
+    w = org_w - patch_w
+    if w < 1:
+        w = 1
+    h = org_h - patch_h
+    if h < 1:
+        h = 1
+    patch_left, patch_top = random.randint(0, w), random.randint(0, h)
     patch_right, patch_bottom = patch_left + patch_w, patch_top + patch_h
     
     if colorized:
@@ -207,7 +218,7 @@ def generate_scar(
         with_padding:bool=False,
         colorized:bool=False,
         augs:ColorJitter=None,
-        color_type:str='random'):
+        color_type:str='random') -> Image.Image:
     img_w, img_h = image.size
     right = 1
     left = 1
@@ -248,7 +259,7 @@ def generate_scar(
     return scar
 
 
-def get_random_coordinate(xy_coords:ArrayType):
+def get_random_coordinate(xy_coords:ArrayType) -> Tuple[int, int]:
     if len(xy_coords) == 0:
         return None
     elif len(xy_coords) < 2:

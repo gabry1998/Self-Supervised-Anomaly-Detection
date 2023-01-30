@@ -73,7 +73,6 @@ def inference_pipeline(
     print('>>> loading mvtec dataset')
     mvtec = MVTecDatamodule(
                 dataset_dir+subject+'/',
-                subject=subject,
                 imsize=imsize,
                 batch_size=batch_size,
                 seed=seed

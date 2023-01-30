@@ -6,6 +6,7 @@ from torchvision.transforms import functional
 from self_supervised.functional import *
 from self_supervised.converters import *
 from self_supervised.visualization import *
+from torch.nn import functional as F
 import self_supervised.datasets as dt
 import self_supervised.models as md
 import random
@@ -107,9 +108,9 @@ class Localizer:
         
         self.mvtec = dt.MVTecDatamodule(
             root_dir=self.dataset_dir+self.subject+'/',
-            subject=self.subject,
             imsize=imsize,
-            batch_size=64
+            batch_size=64,
+            subject=self.subject
         )
         self.mvtec.setup()
     
@@ -143,6 +144,7 @@ class Localizer:
                 saliency_map = F.interpolate(saliency_map[None,None,:], self.imsize[0], mode='bilinear').squeeze()
                 saliency_map[saliency_map < 0.] = 0.
                 saliency_map[saliency_map > 1.] = 1.
+                
             heatmap = apply_heatmap(x[None, :], saliency_map[None, :])
             image = imagetensor2array(x)
             gt = imagetensor2array(gt)
@@ -232,5 +234,5 @@ if __name__ == "__main__":
         )
         localizer.setup_model()
         localizer.localize(num_images=10)
-        #os.system('clear')
+        os.system('clear')
         

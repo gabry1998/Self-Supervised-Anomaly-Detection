@@ -1,11 +1,13 @@
-import numpy as np
-import glob
-import torch
-import os
+from email.mime.text import MIMEText
 from numpy import ndarray
 from PIL import Image
 from torch import Tensor
 from typing import List
+import numpy as np
+import glob
+import torch
+import os
+import smtplib
 
 
 
@@ -91,3 +93,19 @@ def normalize_in_interval(sample_mat:ndarray, interval_min:int, interval_max:int
     x = np.rint(x)
     return x
 
+
+def notify(
+        source:str='server.lab.peranet@gmail.com', 
+        pwd:str='qzpykdqppygcfqtm', 
+        destination:str='gabrymad998@gmail.com', 
+        subject:str='A subject', 
+        message:str='a message example'):
+    
+    text = MIMEText(message,'html')
+    subject = 'subject:'+subject+' \n'
+    with smtplib.SMTP_SSL('smtp.gmail.com', 465) as connection:  
+        connection.login(source, pwd)
+        connection.sendmail(
+            from_addr=source, 
+            to_addrs=destination, 
+            msg=subject+text.as_string())
