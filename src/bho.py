@@ -51,15 +51,16 @@ def specials():
 
 
 if __name__ == "__main__":
-    inputdir = 'brutta_brutta_copia/computations/'
-    outputdir = 'brutta_brutta_copia/computations/'
+    inputdir = 'brutta_copia/patch_32/patch_32_200epochs/computations/'
+    outputdir = 'brutta_copia/patch_32/patch_32_200epochs/computations/'
     experiments = get_all_subject_experiments('dataset/')
     textures = get_textures_names()
     obj1 = obj_set_one()
     obj2 = obj_set_two()
     
     #### modificare qui ####
-    experiments_list = obj1
+    experiments_list = experiments
+    experiments_list2 = experiments
     #### -------------- ####
     
     subjects = np.array_str(np.array(experiments_list))[0:-1].replace(' ','<br>- ').replace('[','- ')
@@ -69,14 +70,14 @@ if __name__ == "__main__":
     run(
         experiments_list=experiments_list,
         dataset_dir='dataset/', 
-        root_outputs_dir=inputdir,
+        root_outputs_dir=outputdir,
         imsize=(256,256),
         patch_localization=True,
-        batch_size=64,
+        batch_size=96,
         projection_training_lr=0.03,
         projection_training_epochs=10,
-        fine_tune_lr=0.01,
-        fine_tune_epochs=50
+        fine_tune_lr=0.005,
+        fine_tune_epochs=200
     )
     
     # end training, notify
@@ -107,10 +108,12 @@ if __name__ == "__main__":
             to_addrs='gabrymad998@gmail.com', 
             msg='subject:Training \n'+text.as_string())
         
+        
+        
     # start evaluation
     now = datetime.now()
     start = now.strftime("%d/%m/%Y %H:%M:%S")
-    report = evaluate(
+    tot, textures_scores, obj_scores = evaluate(
         dataset_dir='dataset/',
         root_inputs_dir=inputdir,
         root_outputs_dir=outputdir,
@@ -119,8 +122,17 @@ if __name__ == "__main__":
         stride=8,
         seed=123456789,
         patch_localization=True,
-        experiments_list=experiments_list
+        experiments_list=experiments_list2
     )
+    if textures_scores is None:
+        scores1 = ''
+    else:
+        scores1 = textures_scores.to_html()
+        
+    if obj_scores is None:
+        scores2 = ''
+    else:
+        scores2 = obj_scores.to_html()
     # end evaluation, notify
     now = datetime.now()
     end = now.strftime("%d/%m/%Y %H:%M:%S")
@@ -136,9 +148,12 @@ if __name__ == "__main__":
     (orario e' un'ora indietro) <br>
     </head>
     <body>
-    {df} 
+    {df1}
+    <br>
+    <br>
+    {df2}
     </body>
-    </html>'''.format(df=report.to_html(), start=start, end=end, objs=subjects)
+    </html>'''.format(df1=scores1, df2=scores2, start=start, end=end, objs=subjects)
     text = MIMEText(msg,'html')
     with smtplib.SMTP_SSL('smtp.gmail.com', 465) as connection:  
         email_address = 'server.lab.peranet@gmail.com'

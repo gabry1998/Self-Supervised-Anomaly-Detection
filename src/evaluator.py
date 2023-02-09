@@ -17,7 +17,7 @@ import self_supervised.metrics as mtr
 import time
 import random
 import numpy as np
-
+import pandas as pd
 import pytorch_lightning as pl
 import os
 import torch.nn.functional as F
@@ -65,7 +65,7 @@ class Evaluator:
         
         
         
-    def setup_dataset(self, imsize:tuple=(256,256), batch_size:int=128):
+    def setup_dataset(self, imsize:tuple=(256,256), artificial_batch_size:int=16, mvtec_batch_size:int=128):
         
         self.imsize = imsize
         
@@ -73,7 +73,7 @@ class Evaluator:
         self.subject,
         self.dataset_dir+self.subject+'/',
         imsize=imsize,
-        batch_size=batch_size,
+        batch_size=artificial_batch_size,
         seed=self.seed,
         duplication=True,
         min_dataset_length=500,
@@ -85,7 +85,7 @@ class Evaluator:
         self.mvtec_datamodule = MVTecDatamodule(
             root_dir=self.dataset_dir+self.subject+'/',
             imsize=imsize,
-            batch_size=batch_size
+            batch_size=mvtec_batch_size
         )
         self.mvtec_datamodule.setup()
     
@@ -186,13 +186,13 @@ class Evaluator:
                 self.detector.fit(peranet.memory_bank.detach())
             else:
                 self.detector.fit(self._get_detector_good_embeddings())
-            images, gts, originals = next(iter(self.mvtec_datamodule.test_dataloader()))
+            # inferencing over mvtec images 
+            images, gts, _ = next(iter(self.mvtec_datamodule.test_dataloader()))
             j = len(images)
-            # inferencing over images
             print()
-            pbar3 = tqdm(range(j), desc='test images', position=2, leave=False)
+            pbar3 = tqdm(range(j), desc='mvtec test images', position=2, leave=False)
             for i in pbar3:
-                x_prime, gt, x = images[i], gts[i], originals[i]
+                x_prime, gt = images[i], gts[i]
                 # get patches
                 patches = extract_patches(x_prime[None, :], self.patch_dim, self.stride)
                 if torch.cuda.is_available():
@@ -306,10 +306,14 @@ def evaluate(
         patch_localization=True,
         experiments_list=[]
         ):
-    metric_dict={}
+    
     image_aurocs = []
     pixel_aurocs = []
     aupros = []
+    
+    objects_names = []
+    textures_names = []
+    
     pbar = tqdm(range(len(experiments_list)), position=0, leave=False)
     for i in pbar:
         pbar.set_description('Evaluation pipeline | current subject is '+experiments_list[i].upper())
@@ -326,27 +330,47 @@ def evaluate(
         )
         evaluator.setup_dataset()
         evaluator.evaluate()
-        
+        if not experiments_list[i] in np.array(['carpet','grid','leather','tile','wood']):
+            objects_names.append(experiments_list[i])
+        else:
+            textures_names.append(experiments_list[i])
         image_aurocs.append(evaluator.image_auroc)
         pixel_aurocs.append(evaluator.pixel_auroc)
         aupros.append(evaluator.aupro)
         os.system('clear')
     
-    experiments_list.append('average')
-    if not patch_localization:
-        metric_dict['AUC (image)'] = np.append(
-            image_aurocs, 
-            np.mean(image_aurocs))
-    metric_dict['AUC (pixel)'] = np.append(
-        pixel_aurocs, 
-        np.mean(pixel_aurocs))
-    metric_dict['AUPRO'] = np.append(
-        aupros, 
-        np.mean(aupros))
+    if len(experiments_list) > 0:
+        metric_dict={}
+        if not patch_localization:
+            metric_dict['AUC (image)'] = np.append(
+                image_aurocs, 
+                np.mean(image_aurocs))
+        metric_dict['AUC (pixel)'] = np.append(
+            pixel_aurocs, 
+            np.mean(pixel_aurocs))
+        metric_dict['AUPRO'] = np.append(
+            aupros, 
+            np.mean(aupros))
+        scores = mtr.metrics_to_dataframe(metric_dict, np.array(experiments_list+['average']))
+        mtr.export_dataframe(scores, saving_path=root_outputs_dir, name='patch_all_scores.csv')
+    textures_scores = None
+    if len(textures_names) > 0:
+        textures_scores:pd.DataFrame = scores.loc[textures_names]
+        textures_avg = textures_scores.mean(axis='index').to_dict()
+        textures_avg = pd.DataFrame(textures_avg, columns=textures_scores.keys(), index=['average'])
+        textures_scores = pd.concat([textures_scores, textures_avg])
+        mtr.export_dataframe(textures_scores, saving_path=root_outputs_dir, name='patch_textures_scores.csv')
+    objects_scores = None
+    if len(objects_names) > 0:
+        objects_scores:pd.DataFrame = scores.loc[objects_names]
+        objects_avg = objects_scores.mean(axis='index').to_dict()
+        objects_avg = pd.DataFrame(objects_avg, columns=objects_avg.keys(), index=['average'])
+        objects_scores = pd.concat([objects_scores, objects_avg])
+        mtr.export_dataframe(objects_scores, saving_path=root_outputs_dir, name='patch_objects_scores.csv')
+        
+    return scores, textures_scores, objects_scores  
     
-    report = mtr.metrics_to_dataframe(metric_dict, np.array(experiments_list))
-    mtr.export_dataframe(report, saving_path=root_outputs_dir, name='patch_level_scores.csv')
-    return report
+    
     
     
 if __name__ == "__main__":
@@ -356,10 +380,10 @@ if __name__ == "__main__":
     obj2 = obj_set_two()
     experiments_list = obj1
     
-    report = evaluate(
+    evaluate(
         dataset_dir='dataset/',
-        root_inputs_dir='brutta_copia/computations/',
-        root_outputs_dir='brutta_copia/computations/',
+        root_inputs_dir='brutta_copia/patch_64/computations/',
+        root_outputs_dir='brutta_copia/patch_64/last_checkpoint/',
         imsize=(256,256),
         patch_dim = 32,
         stride=8,

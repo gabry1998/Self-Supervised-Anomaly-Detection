@@ -203,8 +203,8 @@ def obj_set_two():
 
 if __name__ == "__main__":
     dataset_dir='dataset/'
-    root_inputs_dir='brutta_brutta_copia/computations/'
-    root_outputs_dir='brutta_brutta_copia/localization/'
+    root_inputs_dir='brutta_copia/patch_32/patch_32_updated/computations/'
+    root_outputs_dir='brutta_copia/patch_32/patch_32_updated/localization/'
     imsize=(256,256)
     patch_dim = 32
     stride=8
@@ -216,7 +216,7 @@ if __name__ == "__main__":
     obj1 = obj_set_one()
     obj2 = obj_set_two()
     
-    experiments_list = ['bottle']
+    experiments_list = experiments
     pbar = tqdm(range(len(experiments_list)), position=0, leave=False)
     for i in pbar:
         pbar.set_description('Localization pipeline | current subject is '+experiments_list[i].upper())

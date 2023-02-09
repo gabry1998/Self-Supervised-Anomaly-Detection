@@ -22,16 +22,16 @@ import torch.nn.functional as F
 class PeraNet(pl.LightningModule):
     def __init__(
             self,
-            intermediate_outputs:list=['layer2','layer3'],
-            latent_space_layers:int=3,
+            layer_outputs:list=['layer2','layer3'],
+            latent_space_layers:int=5,
             latent_space_layers_base_dim:int=512,
             num_classes:int=3,
-            memory_bank_dim:int=1000) -> None:
+            memory_bank_dim:int=500) -> None:
         super(PeraNet, self).__init__()
 
         self.backbone = 'resnet18'    
         self.__build_net(
-            intermediate_outputs=intermediate_outputs,
+            layer_outputs=layer_outputs,
             latent_space_layers=latent_space_layers,
             latent_space_layers_base_dim=latent_space_layers_base_dim,
             num_classes=num_classes)
@@ -80,29 +80,33 @@ class PeraNet(pl.LightningModule):
         return projection_head
     
     
+    def __setup_concatenator(self, input_dim:int, output_dim) -> nn.Sequential:
+        return nn.Sequential(
+                        nn.Linear(input_dim, output_dim, bias=False),
+                        nn.BatchNorm1d(output_dim),
+                        nn.ReLU(inplace=True)
+                    )
+        
+        
     def __setup_classifier(self, input_dim:int, num_classes:int) -> nn.Linear:
         return nn.Linear(input_dim, num_classes)
     
     
     def __build_net(
             self, 
-            intermediate_outputs:list=None,
-            latent_space_layers:int=3,
-            latent_space_layers_base_dim:int=512,
-            num_classes:int=2) -> None:
+            layer_outputs:list,
+            latent_space_layers:int,
+            latent_space_layers_base_dim:int,
+            num_classes:int) -> None:
         
         # function for hooks
         def get_activation(name):
             def hook(model, input, output):
-                self.activations[name] = output.detach()
+                self.activations[name] = output
             return hook
 
         # setup backbone
         self.feature_extractor = self.__setup_backbone()
-        
-        self.side_latent_space_1:nn.Sequential = None
-        self.side_latent_space_2:nn.Sequential = None
-        self.side_latent_space_3:nn.Sequential = None
         
         # func for FC layers dim
         def get_dim(layers:list, base_dim:int):
@@ -110,33 +114,31 @@ class PeraNet(pl.LightningModule):
             if 'layer1' in layers:
                 dim += 64
                 self.feature_extractor.layer1.register_forward_hook(get_activation('layer1'))
-                self.side_latent_space_1 = self.__setup_latent_space(latent_space_layers, 64)
             if 'layer2' in layers:
                 dim += 128
                 self.feature_extractor.layer2.register_forward_hook(get_activation('layer2'))
-                self.side_latent_space_2 = self.__setup_latent_space(latent_space_layers, 128)
             if 'layer3' in layers:
                 dim += 256
                 self.feature_extractor.layer3.register_forward_hook(get_activation('layer3'))
-                self.side_latent_space_3 = self.__setup_latent_space(latent_space_layers, 256)
             return dim
 
-        dim = latent_space_layers_base_dim if intermediate_outputs is None \
-            else get_dim(intermediate_outputs, latent_space_layers_base_dim)
-            
+        dim = get_dim(layer_outputs, latent_space_layers_base_dim)
         # setup latent space
+        self.concatenator = self.__setup_concatenator(dim, latent_space_layers_base_dim)
+
         self.latent_space = self.__setup_latent_space(
-            latent_space_layers=latent_space_layers, 
+            latent_space_layers=latent_space_layers-1, 
             dim=latent_space_layers_base_dim)
+            
         # setup classifier
         self.classifier = self.__setup_classifier(
-            input_dim=dim, 
+            input_dim=latent_space_layers_base_dim,
             num_classes=num_classes)
      
 
     def summary(self) -> None:
         with torch.no_grad():
-            torch_summary(self.to('cpu'), (3,256,256), device='cpu')
+            torch_summary(self.to('cpu'), (3,64,64), device='cpu')
      
     
     def enable_mvtec_inference(self) -> None:
@@ -208,46 +210,53 @@ class PeraNet(pl.LightningModule):
             self.memory_bank = torch.tensor([])
     
     
+    def fill_memory_bank(self, embeds:Tensor, y:Tensor, y_hat:Tensor):
+        mask = (y==0) & (y_hat==0)
+        embeds = embeds[mask].detach().to('cpu', non_blocking=True)
+        self.memory_bank = torch.cat([self.memory_bank, embeds])
+        
+        x = deque(self.memory_bank, self.memory_bank_dim)
+        self.memory_bank = torch.from_numpy(np.array([np.array(k) for k in x]))
+    
+    
     def on_train_epoch_end(self) -> None:
         x = deque(self.memory_bank, self.memory_bank_dim)
         self.memory_bank = torch.from_numpy(np.array([np.array(k) for k in x]))
         
         
     def forward(self, x:Tensor) -> dict:
+        b, c, h, w = x.shape
+        if h < 64 or w < 64:
+            x = F.interpolate(x, (64,64), mode='bilinear')
         output = {}
         self.activations = {}
+        
         # forwarding through backbone
         features = self.feature_extractor(x)
         features = torch.flatten(features, 1)
         
-        
-        if 'layer3' in self.activations:
-            f3:Tensor = self.activations['layer3']
-            f3 = F.adaptive_avg_pool2d(f3, output_size=(1,1))
-            f3 = torch.flatten(f3, 1)
-            f3 = self.side_latent_space_3(f3)
-        if 'layer2' in self.activations:
-            f2:Tensor = self.activations['layer2']
-            f2 = F.adaptive_avg_pool2d(f2, output_size=(1,1))
-            f2 = torch.flatten(f2, 1)
-            f2 = self.side_latent_space_2(f2)
         if 'layer1' in self.activations:
             f1:Tensor = self.activations['layer1']
             f1 = F.adaptive_avg_pool2d(f1, output_size=(1,1))
             f1 = torch.flatten(f1, 1)
-            f1 = self.side_latent_space_1(f1)
-        
-        
-        # feeding latent space with embedding vector
-        embeddings = self.latent_space(features)
+        if 'layer2' in self.activations:
+            f2:Tensor = self.activations['layer2']
+            f2 = F.adaptive_avg_pool2d(f2, output_size=(1,1))
+            f2 = torch.flatten(f2, 1)
+        if 'layer3' in self.activations:
+            f3:Tensor = self.activations['layer3']
+            f3 = F.adaptive_avg_pool2d(f3, output_size=(1,1))
+            f3 = torch.flatten(f3, 1)
         
         if 'layer3' in self.activations:
-            embeddings = torch.cat([f3, embeddings], dim=1)
+            features = torch.cat([f3, features], dim=1)
         if 'layer2' in self.activations:
-            embeddings = torch.cat([f2, embeddings], dim=1)
+            features = torch.cat([f2, features], dim=1)
         if 'layer1' in self.activations:
-            embeddings = torch.cat([f1, embeddings], dim=1)
-        
+            features = torch.cat([f1, features], dim=1)
+        # feeding latent space with embedding vector
+        features = self.concatenator(features)
+        embeddings = self.latent_space(features)
         y_hat = self.classifier(embeddings)
         
         output['classifier'] = y_hat

@@ -26,13 +26,13 @@ import pytorch_lightning as pl
 
 
 class CPP:
-    jitter_offset = 0.1
-    
-    rectangle_area_ratio = (0.1, 0.5)
-    rectangle_aspect_ratio = ((0.1, 1),(1, 3.3))
-    
-    scar_area_ratio = (0.01, 0.05)
-    scar_aspect_ratio = ((0.1, 1),(1, 3.3))
+    jitter_offset = 0.3
+        
+    rectangle_area_ratio = (0.1, 0.2)
+    rectangle_aspect_ratio = ((0.3, 1),(1, 3.3))
+
+    scar_area_ratio = (0.01, 0.02)
+    scar_aspect_ratio = ((0.05, 0.5),(2.5, 3.3))
 
     jitter_transforms = transforms.ColorJitter(
                             brightness = jitter_offset,
@@ -180,9 +180,12 @@ class PretextTaskDataset(Dataset):
         self.patch_localization = patch_localization
         self.patch_size = patch_size
         
+        # load N images, for each object class in dataset
         all_classes = np.array(get_all_subject_experiments('dataset/'))
-        idx = np.where(all_classes == self.subject)
-        self.classes = np.delete(all_classes, idx)
+        self.images_for_cut = [
+            Image.open('dataset/'+sub+'/train/good/000.png').resize(imsize).convert('RGB') \
+                for sub in all_classes
+        ]
         
         # create a single mask for position-fixed object
         # textures just have a white image
@@ -192,7 +195,7 @@ class PretextTaskDataset(Dataset):
             temp = Image.open('dataset/'+self.subject+'/train/good/000.png').resize(imsize).convert('RGB')
             self.fixed_segmentation = obj_mask(temp)
         
-        
+    
     def __getitem__(self, index:int):
         # load image
         original = Image.open(
@@ -200,26 +203,25 @@ class PretextTaskDataset(Dataset):
         original = original.resize(self.imsize).convert('RGB')
         # apply label
         y = random.randint(0, 2)
+        
         # copy original for second use
         x = original.copy()
+        
         # get image to crop for artificial defect
         if self.subject in constants.TEXTURES():
-            random_subject = random.choice(self.classes)
-            image_for_cutting = Image.open(
-                'dataset/'+random_subject+'/train/good/000.png'
-            ).resize(self.imsize).convert('RGB')
+            image_for_cutting:Image.Image = random.choice(self.images_for_cut)
         else:
-            image_for_cutting = original.copy()
-        
+            image_for_cutting = original
         
         # create new masks only for non-fixed objects
         if self.subject in constants.NON_FIXED_OBJECTS():
             segmentation = obj_mask(original)
         else:
             segmentation = self.fixed_segmentation
+            
         # container dims
-        container_scaling_factor_patch = 2
-        container_scaling_factor_scar = 2.5
+        container_scaling_factor_patch = 1.75
+        container_scaling_factor_scar = 2
         
         # crop image if patch-level mode
         if self.patch_localization:
@@ -243,32 +245,36 @@ class PretextTaskDataset(Dataset):
             coords = get_random_coordinate(coords_map)
             
             # big defect (polygon)
+            t = random.randint(0,2)
             if y == 1:
-                a = generate_patch(
-                    image_for_cutting,
-                    area_ratio=CPP.rectangle_area_ratio,
-                    aspect_ratio=CPP.rectangle_aspect_ratio,
-                )
-                b = generate_patch(
-                    image_for_cutting,
-                    area_ratio=CPP.rectangle_area_ratio,
-                    aspect_ratio=CPP.rectangle_aspect_ratio,
-                    colorized=True,
-                    color_type='average'
-                )
-                c = generate_patch(
-                    image_for_cutting,
-                    area_ratio=CPP.rectangle_area_ratio,
-                    aspect_ratio=CPP.rectangle_aspect_ratio,
-                    colorized=True,
-                    color_type='random'
-                )
-                patch = random.choice([a,b,c])
+                if t == 0:
+                    patch = generate_patch(
+                        image_for_cutting,
+                        area_ratio=CPP.rectangle_area_ratio,
+                        aspect_ratio=CPP.rectangle_aspect_ratio,
+                    )
+                if t == 1:
+                    patch = generate_patch(
+                        image_for_cutting,
+                        area_ratio=CPP.rectangle_area_ratio,
+                        aspect_ratio=CPP.rectangle_aspect_ratio,
+                        colorized=True,
+                        color_type='average'
+                    )
+                if t == 2:
+                    patch = generate_patch(
+                        image_for_cutting,
+                        area_ratio=CPP.rectangle_area_ratio,
+                        aspect_ratio=CPP.rectangle_aspect_ratio,
+                        colorized=True,
+                        color_type='random'
+                    )
                 # check color similarity
                 if check_color_similarity(x, patch) > 0.99:
-                    low = np.random.uniform(0.3, 0.6)
-                    high = np.random.uniform(1.2, 1.8)
+                    low = np.random.uniform(0.3, 0.5)
+                    high = np.random.uniform(1.5, 1.7)
                     patch = ImageEnhance.Brightness(patch).enhance(random.choice([low, high]))
+                    patch = ImageEnhance.Contrast(patch).enhance(random.choice([low, high]))
                 coords = check_valid_coordinates_by_container(
                         x.size, 
                         patch.size, 
@@ -281,31 +287,34 @@ class PretextTaskDataset(Dataset):
                 x = paste_patch(x, patch, coords, mask) 
             # small defect (scar)
             else:
-                a = generate_patch(
-                    image_for_cutting,
-                    area_ratio=CPP.scar_area_ratio,
-                    aspect_ratio=CPP.scar_aspect_ratio
-                )
-                b = generate_patch(
-                    image_for_cutting,
-                    area_ratio=CPP.scar_area_ratio,
-                    aspect_ratio=CPP.scar_aspect_ratio,
-                    colorized=True,
-                    color_type='average'
-                )
-                c = generate_patch(
-                    image_for_cutting,
-                    area_ratio=CPP.scar_area_ratio,
-                    aspect_ratio=CPP.scar_aspect_ratio,
-                    colorized=True,
-                    color_type='random'
-                )
-                #scar = random.choice([c])
+                if t == 0:
+                    scar = generate_patch(
+                        image_for_cutting,
+                        area_ratio=CPP.scar_area_ratio,
+                        aspect_ratio=CPP.scar_aspect_ratio
+                    )
+                if t == 1:
+                    scar = generate_patch(
+                        image_for_cutting,
+                        area_ratio=CPP.scar_area_ratio,
+                        aspect_ratio=CPP.scar_aspect_ratio,
+                        colorized=True,
+                        color_type='average'
+                    )
+                if t == 2:
+                    scar = generate_patch(
+                        image_for_cutting,
+                        area_ratio=CPP.scar_area_ratio,
+                        aspect_ratio=CPP.scar_aspect_ratio,
+                        colorized=True,
+                        color_type='random'
+                    )
                 # check color similarity
                 if check_color_similarity(x, scar) > 0.99:
                     low = np.random.uniform(0.3, 0.5)
                     high = np.random.uniform(1.5, 1.7)
                     scar = ImageEnhance.Brightness(scar).enhance(random.choice([low, high]))
+                    scar = ImageEnhance.Contrast(scar).enhance(random.choice([low, high]))
                 angle = random.randint(-45,45)
                 scar = scar.convert('RGBA')
                 scar = scar.rotate(angle, expand=True)
@@ -435,7 +444,7 @@ class PretextTaskDatamodule(pl.LightningDataModule):
             batch_size=self.batch_size, 
             shuffle=False,
             drop_last=True,
-            pin_memory=True,
+            persistent_workers=True,
             num_workers=8)
 
 
@@ -445,7 +454,7 @@ class PretextTaskDatamodule(pl.LightningDataModule):
             batch_size=self.batch_size, 
             shuffle=False,
             drop_last=True,
-            pin_memory=True,
+            persistent_workers=True,
             num_workers=8)
     
     

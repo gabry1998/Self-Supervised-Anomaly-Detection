@@ -1,8 +1,8 @@
 import shutil
-from self_supervised.datasets import PretextTaskDatamodule
+from self_supervised.datasets import PretextTaskDatamodule, MVTecDatamodule
 from self_supervised.models import PeraNet
 from self_supervised.custom_callbacks import MetricTracker
-from self_supervised.functional import get_all_subject_experiments
+from self_supervised.functional import extract_patches, get_all_subject_experiments, get_prediction_class
 from self_supervised.visualization import plot_history
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from tqdm import tqdm
@@ -13,7 +13,8 @@ import os
 import numpy as np
 import random
 import torch
-
+autograd.anomaly_mode.set_detect_anomaly(False)
+autograd.profiler.profile(False)
 
 
 def get_trainer(stopping_threshold:float, epochs:int, min_epochs:int, log_dir:str):
@@ -33,7 +34,7 @@ def get_trainer(stopping_threshold:float, epochs:int, min_epochs:int, log_dir:st
         every_n_epochs=5)
     trainer = pl.Trainer(
         default_root_dir=log_dir,
-        callbacks= [cb, mc, early_stopping],
+        callbacks= [cb, mc],
         precision=16,
         benchmark=True,
         accelerator='auto', 
@@ -58,8 +59,7 @@ def training_pipeline(
         fine_tune_lr:float=0.001,
         fine_tune_epochs:int=20):
     cudnn.benchmark = True
-    autograd.anomaly_mode.set_detect_anomaly(False)
-    autograd.profiler.profile(False)
+    
     if patch_localization:
         result_path = root_outputs_dir+subject+'/patch_level/'
     else:
@@ -91,7 +91,7 @@ def training_pipeline(
         duplication=True,
         min_dataset_length=1000,
         patch_localization=patch_localization,
-        patch_size=64
+        patch_size=32
     )
     datamodule.setup()
     pretext_model = PeraNet()
@@ -100,7 +100,7 @@ def training_pipeline(
         epochs=projection_training_epochs
     )
     pretext_model.freeze_net(['backbone'])
-    trainer, cb = get_trainer(0.8, projection_training_epochs, min_epochs=3, log_dir=result_path+'logs/')
+    trainer, cb = get_trainer(0.9, projection_training_epochs, min_epochs=3, log_dir=result_path+'logs/')
     print('>>> start training (LATENT SPACE)')
     trainer.fit(pretext_model, datamodule=datamodule)
     print('>>> training plot')
@@ -110,9 +110,10 @@ def training_pipeline(
     pretext_model.num_epochs = fine_tune_epochs
     pretext_model.lr = fine_tune_lr
     pretext_model.unfreeze()
-    trainer, cb = get_trainer(0.995, fine_tune_epochs, min_epochs=None, log_dir=result_path+'logs/')
+    trainer, cb = get_trainer(0.995, fine_tune_epochs, min_epochs=20, log_dir=result_path+'logs/')
     print('>>> start training (WHOLE NET)') 
     trainer.fit(pretext_model, datamodule=datamodule)
+    
     trainer.save_checkpoint(result_path+checkpoint_name)
     print(pretext_model.memory_bank.shape)
     print('>>> training plot')
@@ -208,15 +209,17 @@ if __name__ == "__main__":
     textures = get_textures_names()
     obj1 = obj_set_one()
     obj2 = obj_set_two()
+    experiments_list = ['bottle']
+    outputdir = 'brutta_copia/patch_32/patch_32_updated/computations/'
     run(
-        experiments_list=obj1,
+        experiments_list=experiments_list,
         dataset_dir='dataset/', 
-        root_outputs_dir='brutta_brutta_copia/computations/',
+        root_outputs_dir=outputdir,
         imsize=(256,256),
         patch_localization=True,
-        batch_size=64,
+        batch_size=96,
         projection_training_lr=0.03,
-        projection_training_epochs=30,
-        fine_tune_lr=0.01,
-        fine_tune_epochs=100
+        projection_training_epochs=10,
+        fine_tune_lr=0.005,
+        fine_tune_epochs=30
     )
