@@ -17,7 +17,7 @@ class GradCam:
         def forward_hook(module, input, output):
             self.activations['value'] = output
             return None
-        target_layer = self.localizer.feature_extractor[7]
+        target_layer = self.localizer.feature_extractor.layer4
         
         target_layer.register_forward_hook(forward_hook)
         target_layer.register_backward_hook(backward_hook)
@@ -45,7 +45,6 @@ class GradCam:
         saliency_map = F.interpolate(saliency_map, size=(h,w), mode='bilinear')
         saliency_map_min, saliency_map_max = saliency_map.min(), saliency_map.max()
         saliency_map = (saliency_map - saliency_map_min).div(saliency_map_max - saliency_map_min).data
-
         return saliency_map
     
     def __call__(self, input, class_idx=None):

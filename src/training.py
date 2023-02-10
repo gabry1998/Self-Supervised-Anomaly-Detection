@@ -209,17 +209,17 @@ if __name__ == "__main__":
     textures = get_textures_names()
     obj1 = obj_set_one()
     obj2 = obj_set_two()
-    experiments_list = ['bottle']
+    experiments_list = obj2
     outputdir = 'brutta_copia/patch_32/patch_32_updated/computations/'
     run(
         experiments_list=experiments_list,
         dataset_dir='dataset/', 
         root_outputs_dir=outputdir,
         imsize=(256,256),
-        patch_localization=True,
+        patch_localization=False,
         batch_size=96,
         projection_training_lr=0.03,
         projection_training_epochs=10,
         fine_tune_lr=0.005,
-        fine_tune_epochs=30
+        fine_tune_epochs=50
     )

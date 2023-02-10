@@ -209,7 +209,7 @@ if __name__ == "__main__":
     patch_dim = 32
     stride=8
     seed=123456789
-    patch_localization=True
+    patch_localization=False
       
     experiments = get_all_subject_experiments('dataset/')
     textures = get_textures_names()

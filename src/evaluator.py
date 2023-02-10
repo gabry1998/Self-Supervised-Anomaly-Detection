@@ -65,7 +65,7 @@ class Evaluator:
         
         
         
-    def setup_dataset(self, imsize:tuple=(256,256), artificial_batch_size:int=16, mvtec_batch_size:int=128):
+    def setup_dataset(self, imsize:tuple=(256,256), artificial_batch_size:int=96, mvtec_batch_size:int=128):
         
         self.imsize = imsize
         
@@ -131,46 +131,49 @@ class Evaluator:
             artificial_predictions = tester.predict(peranet, self.artificial_datamodule)[0]
             artificial_y_hat = artificial_predictions['y_hat']
             artificial_y_true = artificial_predictions['y_true']
-            artificial_embeddings = artificial_predictions['embeddings']
-            artificial_tsne = artificial_predictions['y_hat_tsne']
+            artificial_embeddings = artificial_predictions['embedding']
+            artificial_tsne = artificial_predictions['y_tsne']
             
             # mvtec inference
+            peranet.enable_mvtec_inference()
             mvtec_predictions = tester.predict(peranet, self.mvtec_datamodule)[0]
             mvtec_x = mvtec_predictions['x_prime']
             mvtec_y_hat = mvtec_predictions['y_hat']
             mvtec_y_true = mvtec_predictions['y_true']
             mvtec_groundtruths = mvtec_predictions['groundtruth']
-            mvtec_embeddings = mvtec_predictions['embeddings']
-            mvtec_tsne = mvtec_predictions['y_hat_tsne']
+            mvtec_embeddings = mvtec_predictions['embedding']
+            mvtec_tsne = mvtec_predictions['y_tsne']
             
-            # train data for kde
+            # train data for AD
             kde_train_data = tester.predict(peranet, self.mvtec_datamodule.train_dataloader())[0]
             
             # normalization
-            kde_train_data = torch.nn.functional.normalize(kde_train_data, p=2, dim=1)
+            #kde_train_data = torch.nn.functional.normalize(kde_train_data['embedding'], p=2, dim=1)
             artificial_embeddings = torch.nn.functional.normalize(artificial_embeddings, p=2, dim=1)
             mvtec_embeddings = torch.nn.functional.normalize(mvtec_embeddings, p=2, dim=1)
             
             # computing anomaly scores
-            kde = GDE()
-            kde.fit(kde_train_data)
-            anomaly_scores = kde.predict(mvtec_embeddings)
+            #kde = GDE()
+            detector = AnomalyDetector()
+            detector.fit(peranet.memory_bank)
+            anomaly_scores = detector.predict(mvtec_embeddings)
             
             # gradcam for pixel metrics and pro
             gradcam = GradCam(model=peranet)
             anomaly_maps = torch.tensor([])
-            for i in range(len(len(artificial_tsne))):
+            for i in range(len(mvtec_x)):
                 if mvtec_y_hat[i] == 0:
-                    saliency_map = torch.zeros(self.imsize)[None, :]
+                    # saliency is a 1x1xHxW tensor here
+                    saliency_map = torch.zeros(self.imsize)[None, None, :]
                 else:
                     x = mvtec_x[i]
                     # saliency is a 1x1xHxW tensor here
                     saliency_map = gradcam(x[None, :], mvtec_y_hat[i])
-
                 anomaly_maps = torch.cat([anomaly_maps, saliency_map]) # saliency is a 1xHxW tensor here
+            anomaly_scores_pixel = torch.nan_to_num(anomaly_maps.flatten(0, -1))
             ground_truth_maps = mvtec_groundtruths.squeeze()
-            anomaly_scores_pixel = torch.nan_to_num(saliency_map.flatten(0, -1))
-            mvtec_y_true_pixel = torch.nan_to_num(gt.flatten(0, -1))
+            anomaly_maps = anomaly_maps.squeeze()
+            mvtec_y_true_pixel = torch.nan_to_num(ground_truth_maps.flatten(0, -1))
         else:
             if torch.cuda.is_available():
                 peranet.to('cuda')
@@ -228,10 +231,17 @@ class Evaluator:
                 saving_path=self.outputs_dir,
                 title='Roc curve for '+self.subject.upper()+' ['+str(self.seed)+']',
                 name='image_roc.png')
+            vis.plot_tsne(
+                torch.cat([artificial_embeddings, mvtec_embeddings]),
+                torch.cat([artificial_tsne, mvtec_tsne]),
+                saving_path=self.outputs_dir,
+                name=self.subject+'_tsne.png',
+                num_classes=3)
         # pixel level roc
         fpr, tpr, auc_score = self._compute_auroc(mvtec_y_true_pixel, anomaly_scores_pixel)
         self.pixel_auroc = auc_score
         # pro
+        print(ground_truth_maps.shape, anomaly_maps.shape)
         all_fprs, all_pros, au_pro = self._compute_aupro(ground_truth_maps, anomaly_maps)
         self.aupro = au_pro
         vis.plot_curve(
@@ -352,21 +362,21 @@ def evaluate(
             aupros, 
             np.mean(aupros))
         scores = mtr.metrics_to_dataframe(metric_dict, np.array(experiments_list+['average']))
-        mtr.export_dataframe(scores, saving_path=root_outputs_dir, name='patch_all_scores.csv')
+        mtr.export_dataframe(scores, saving_path=root_outputs_dir, name='image_all_scores.csv')
     textures_scores = None
     if len(textures_names) > 0:
         textures_scores:pd.DataFrame = scores.loc[textures_names]
         textures_avg = textures_scores.mean(axis='index').to_dict()
         textures_avg = pd.DataFrame(textures_avg, columns=textures_scores.keys(), index=['average'])
         textures_scores = pd.concat([textures_scores, textures_avg])
-        mtr.export_dataframe(textures_scores, saving_path=root_outputs_dir, name='patch_textures_scores.csv')
+        mtr.export_dataframe(textures_scores, saving_path=root_outputs_dir, name='image_textures_scores.csv')
     objects_scores = None
     if len(objects_names) > 0:
         objects_scores:pd.DataFrame = scores.loc[objects_names]
         objects_avg = objects_scores.mean(axis='index').to_dict()
         objects_avg = pd.DataFrame(objects_avg, columns=objects_avg.keys(), index=['average'])
         objects_scores = pd.concat([objects_scores, objects_avg])
-        mtr.export_dataframe(objects_scores, saving_path=root_outputs_dir, name='patch_objects_scores.csv')
+        mtr.export_dataframe(objects_scores, saving_path=root_outputs_dir, name='image_objects_scores.csv')
         
     return scores, textures_scores, objects_scores  
     
@@ -378,16 +388,16 @@ if __name__ == "__main__":
     textures = get_textures_names()
     obj1 = obj_set_one()
     obj2 = obj_set_two()
-    experiments_list = obj1
+    experiments_list = experiments
     
     evaluate(
         dataset_dir='dataset/',
-        root_inputs_dir='brutta_copia/patch_64/computations/',
-        root_outputs_dir='brutta_copia/patch_64/last_checkpoint/',
+        root_inputs_dir='brutta_copia/patch_32/patch_32_updated/computations/',
+        root_outputs_dir='brutta_copia/patch_32/patch_32_updated/computations/',
         imsize=(256,256),
         patch_dim = 32,
         stride=8,
         seed=123456789,
-        patch_localization=True,
+        patch_localization=False,
         experiments_list=experiments_list
     )
