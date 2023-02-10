@@ -7,12 +7,13 @@ __pycache__/
 *.so
 
 #project folders
+logs/
 da non cancellare/
 appunti.txt
 mvtec/
 dataset/
 lightning_logs/
-logs/
+
 temp/
 src/mvtec_ad_evaluation/
 src/test.py
