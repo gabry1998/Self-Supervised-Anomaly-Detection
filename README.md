@@ -17,12 +17,46 @@ The Pretext Task is solved creating an artificial dataset based on the original 
 After training the network, the knowledge (weights) are transferred in a new model (equal or smaller) to solve the so-called Downstream Task (the original problem we wanted to solve), using the original real data.
 
 ## Pretext Task
+### Artificial Dataset
 For the pretext task an artificially created dataset is used. It consists of three classes of elements (image without defects, image with large transformation, image with small transformation).
-The generation and labeling phase is performed automatically at runtime: during training, for each image in the batch, a random value Y (the label associated with the image) is first generated in the interval [0, 2]. If the value of Y is greater than zero the image is transformed to generate the error. Errors are entered by means of geometric transformations.
+The generation and labeling phase is performed automatically at runtime: during training, for each image in the batch, a random value Y (the label associated with the image) is first generated in the interval [0, 2].
+
+If the value of Y is greater than zero the image is transformed to generate the error. Errors are entered by means of geometric transformations.
 If the generated label Y is 0, then only basic augmentation transformations such as Contrast, Brightness, and Hue are applied to the image.
 
-<br>
+The artificial defects can be a cut-paste of a portion of the image, an average color or a flat random color.
+
+### Generating Big Defect
+If the Y label is equal to 1, a non-regular polygon is generated within the image. To create the polygon a randomly sized rectangle is first defined taking into account ``area_ratio`` and ``aspect_ratio``.
+
+``area_ratio`` refers to the ratio of the area of ​​the rectangle in question to the total area of ​​the image. It is a real value randomly chosen in the interval [0.05, 0.1].
+
+``aspect_ratio`` refers to the ratio of the length to the height of the rectangle, and is a randomly chosen value in [0.3, 1)U(1, 3.3].
+
+Having length and height of the rectangle, a region of the image is cut within 4 random points (a,b,c,d)
+
+<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/readme_images/cable_patch.png"/>
+
+If the element in question is a texture (for example *carpet*), the cut is done by taking an image of a random element in the mvtec dataset (for example a portion from an image of the *bottle* object is taken). This is to avoid that the cut part, once pasted on the original image, gets confused too much with it.
+Since carrying out cutting operations to obtain non-regular polygons could be complicated, the idea is to construct a binary mask of the aforementioned polygon, to be subsequently applied on the rectangle just obtained. For each side of the rectangle, 1 or 2 points are chosen, thus obtaining a polygon with a minimum of 4 sides and a maximum of 8. The points are generated in such a way that the polygon is convex.
+<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/readme_images/polygon_points.png"/>
+The mask is generated such that the pixels are equal to 0 if outside the polygon, 1 otherwise.
+<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/readme_images/patch_to_polygon.png"/>
+
+### Generating Small Defect
+If the Y label equals 2, a line is generated within the image. The line is a small randomly generated rectangle similar to the large defect, with the difference that ``area_ratio`` and ``aspect_ratio`` are respectively [0.005, 0.01] and [0.05, 0.5)U(2.5, 3.3].
+The extracted rectangle is then rotated within a range of [-45, 45] degrees
+<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/readme_images/bottle_scar.png"/>
+
+### Object Mask
+To make artificial defects more realistic, it is fair to think that they must be inside the object in question.
+Before proceeding with the generation of the defects, a binary mask of the image is built, which represents the object present inside it (in the case of textures, the mask will have all the positive pixels).
+In the case of objects with fixed position and texture, the mask is built only once for the entire duration of the training, this is justified by the fact of lightening the computational cost.
+<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/readme_images/masks_example.png"/>
+
+### Pasting Objects
+A set of coordinates is extracted from the mask, from which a pair (x,y) is then randomly taken. The couple represents the center of the artificial defect.
+
+### Example
 <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/dataset_analysis/screw/screw_artificial.png"/>
-Artificial dataset example for screw
-<br>
 
