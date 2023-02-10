@@ -11,6 +11,7 @@ da non cancellare/
 appunti.txt
 mvtec/
 dataset/
+lightning_logs/
 logs/
 temp/
 src/mvtec_ad_evaluation/
