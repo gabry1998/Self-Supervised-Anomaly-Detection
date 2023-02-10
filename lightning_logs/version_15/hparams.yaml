@@ -1,0 +1,12 @@
+batch_size: 128
+duplication: true
+imsize: !!python/tuple
+- 256
+- 256
+min_dataset_length: 500
+patch_localization: false
+patch_size: 64
+root_dir: dataset/bottle/
+seed: 123456789
+subject: bottle
+train_val_split: 0.2

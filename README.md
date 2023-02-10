@@ -17,86 +17,12 @@ The Pretext Task is solved creating an artificial dataset based on the original 
 After training the network, the knowledge (weights) are transferred in a new model (equal or smaller) to solve the so-called Downstream Task (the original problem we wanted to solve), using the original real data.
 
 ## Pretext Task
-The pretext task is considered a supervised classification task in such a way the dataset is labeled in 3 classes:
-* 0 -> anomaly-free image
-* 1 -> polygoned patch image (an image where a random portion of it is cut and pasted in a random location)
-* 2 -> scar (a random line is drawn over the image in a random position)
+For the pretext task an artificially created dataset is used. It consists of three classes of elements (image without defects, image with large transformation, image with small transformation).
+The generation and labeling phase is performed automatically at runtime: during training, for each image in the batch, a random value Y (the label associated with the image) is first generated in the interval [0, 2]. If the value of Y is greater than zero the image is transformed to generate the error. Errors are entered by means of geometric transformations.
+If the generated label Y is 0, then only basic augmentation transformations such as Contrast, Brightness, and Hue are applied to the image.
 
-First the labels are generated, then the respective image transformations are applied.
-
-### CutPaste (with polygon) Approach Example
-
+<br>
 <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/dataset_analysis/screw/screw_artificial.png"/>
+Artificial dataset example for screw
+<br>
 
-### Computation Examples
-
-#### Object (BOTTLES)
-
-| t-SNE | ROC |
-| :--: | :--: |
-| <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/bottle/image_level/tsne.png"/> | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/bottle/image_level/roc.png"/>|
-
-Gradcam example (Image Level Localization)
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/localization/bottle/image_level/gradcam/heatmap_and_masks_3.png"/>
-
-#### Texture (GRID)
-
-|t-SNE| ROC |
-| :--: | :--: |
-| <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/grid/image_level/tsne.png"/> | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/grid/image_level/roc.png"/> |
-
-Gradcam example (Image Level Localization)
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/localization/grid/image_level/gradcam/heatmap_and_masks_2.png"/>
-
-#### Explanation
-In the example we have an almost perfect scenario in BOTTLES, and the real defect (purple) are in the same region as artificial defects. In GRID we can see a more sparse distribution, caused by the homogeneous patterns in images and small defects hard to localize, still, we can see real defect overlapped on scars and polygon patches
-### Experiment results
-
-|  | AUC | F1 | pixel AUC | PRO |
-|:---:|:---:|:---:|:---:|:---:|
-| average | 0.9 | 0.79 | 0.76 | 0.52 |
-| bottle | 0.97 | 0.94 | 0.84 | 0.63 |
-| cable | 0.8 | 0.74 | 0.65 | 0.46 |
-| capsule | 0.71 | 0.15 | 0.55 | 0.2 |
-| carpet | 0.98 | 0.86 | 0.7 | 0.59 |
-| grid | 0.94 | 0.93 | 0.78 | 0.64 |
-| hazelnut | 0.98 | 0.86 | 0.78 | 0.62 |
-| leather | 0.97 | 0.92 | 0.9 | 0.81 |
-| metal_nut | 0.93 | 0.83 | 0.75 | 0.37 |
-| pill | 0.81 | 0.48 | 0.87 | 0.29 |
-| screw | 0.8 | 0.92 | 0.67 | 0.46 |
-| tile | 0.96 | 0.89 | 0.72 | 0.53 |
-| toothbrush | 0.86 | 0.85 | 0.9 | 0.48 |
-| transistor | 0.8 | 0.59 | 0.72 | 0.52 |
-| wood | 0.96 | 0.94 | 0.61 | 0.5 |
-| zipper | 0.98 | 0.93 | 0.9 | 0.71 |
-
-
-## Other Examples
-### Textures
-#### Image level (gradcam)
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/localization/carpet/image_level/gradcam/heatmap_and_masks_2.png"/>
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/localization/grid/image_level/gradcam/heatmap_and_masks_7.png"/>
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/localization/leather/image_level/gradcam/heatmap_and_masks_5.png"/>
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/localization/tile/image_level/gradcam/heatmap_and_masks_1.png"/>
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/localization/wood/image_level/gradcam/heatmap_and_masks_3.png"/>
-
-#### Patch level (kde)
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/localization/carpet/patch_level/gradcam/heatmap_and_masks_2.png"/>
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/localization/grid/patch_level/gradcam/heatmap_and_masks_7.png"/>
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/localization/leather/patch_level/gradcam/heatmap_and_masks_5.png"/>
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/localization/tile/patch_level/gradcam/heatmap_and_masks_1.png"/>
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/localization/wood/patch_level/gradcam/heatmap_and_masks_3.png"/>
-
-### Objects
-#### Image level (gradcam)
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/localization/bottle/image_level/gradcam/heatmap_and_masks_4.png"/>
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/localization/cable/image_level/gradcam/heatmap_and_masks_1.png"/>
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/localization/hazelnut/image_level/gradcam/heatmap_and_masks_0.png"/>
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/localization/metal_nut/image_level/gradcam/heatmap_and_masks_1.png"/>
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/localization/capsule/image_level/gradcam/heatmap_and_masks_6.png"/>
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/localization/pill/image_level/gradcam/heatmap_and_masks_1.png"/>
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/localization/screw/image_level/gradcam/heatmap_and_masks_7.png"/>
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/localization/toothbrush/image_level/gradcam/heatmap_and_masks_6.png"/>
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/localization/transistor/image_level/gradcam/heatmap_and_masks_9.png"/> 
-<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/localization/zipper/image_level/gradcam/heatmap_and_masks_8.png"/> 
