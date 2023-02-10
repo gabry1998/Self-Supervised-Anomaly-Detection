@@ -45,13 +45,15 @@ The mask is generated such that the pixels are equal to 0 if outside the polygon
 
 ### Generating Small Defect
 If the Y label equals 2, a line is generated within the image. The line is a small randomly generated rectangle similar to the large defect, with the difference that ``area_ratio`` and ``aspect_ratio`` are respectively [0.005, 0.01] and [0.05, 0.5)U(2.5, 3.3].
-The extracted rectangle is then rotated within a range of [-45, 45] degrees
+The extracted rectangle is then rotated within a range of [-45, 45] degrees.
+
 <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/readme_images/bottle_scar.png"/>
 
 ### Object Mask
 To make artificial defects more realistic, it is fair to think that they must be inside the object in question.
 Before proceeding with the generation of the defects, a binary mask of the image is built, which represents the object present inside it (in the case of textures, the mask will have all the positive pixels).
 In the case of objects with fixed position and texture, the mask is built only once for the entire duration of the training, this is justified by the fact of lightening the computational cost.
+
 <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/readme_images/masks_example.png"/>
 
 ### Pasting Objects
