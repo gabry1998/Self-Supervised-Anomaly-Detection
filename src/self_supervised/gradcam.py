@@ -1,5 +1,5 @@
-from self_supervised.model import PeraNet
-import torch
+from self_supervised.models import PeraNet
+from torch import Tensor
 import torch.nn.functional as F
 
 
@@ -17,12 +17,12 @@ class GradCam:
         def forward_hook(module, input, output):
             self.activations['value'] = output
             return None
-        target_layer = self.localizer.feature_extractor[7]
+        target_layer = self.localizer.feature_extractor.layer4
         
         target_layer.register_forward_hook(forward_hook)
         target_layer.register_backward_hook(backward_hook)
     
-    def compute_gradcam(self, input_tensor:torch.Tensor, class_idx=None):
+    def compute_gradcam(self, input_tensor:Tensor, class_idx=None):
         x = input_tensor.clone()
         b, c, h, w = x.size()
         out = self.localizer(x)
@@ -42,11 +42,9 @@ class GradCam:
     
         saliency_map = (weights*activations).sum(1, keepdim=True)
         saliency_map = F.relu(saliency_map)
-        #saliency_map = F.upsample(saliency_map, size=(h, w), mode='bilinear', align_corners=False)
         saliency_map = F.interpolate(saliency_map, size=(h,w), mode='bilinear')
         saliency_map_min, saliency_map_max = saliency_map.min(), saliency_map.max()
         saliency_map = (saliency_map - saliency_map_min).div(saliency_map_max - saliency_map_min).data
-
         return saliency_map
     
     def __call__(self, input, class_idx=None):

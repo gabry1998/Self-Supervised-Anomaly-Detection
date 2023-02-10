@@ -1,16 +1,20 @@
 import shutil
-from self_supervised.datasets import GenerativeDatamodule
-from self_supervised.support import constants as CONST
-from self_supervised.model import PeraNet, MetricTracker
-from self_supervised.support.functional import get_all_subject_experiments
-from self_supervised.support.visualization import plot_history
-from pytorch_lightning.callbacks import EarlyStopping
+from self_supervised.datasets import PretextTaskDatamodule, MVTecDatamodule
+from self_supervised.models import PeraNet
+from self_supervised.custom_callbacks import MetricTracker
+from self_supervised.functional import extract_patches, get_all_subject_experiments, get_prediction_class
+from self_supervised.visualization import plot_history
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from tqdm import tqdm
+from torch.backends import cudnn
+from torch import autograd
 import pytorch_lightning as pl
 import os
 import numpy as np
 import random
 import torch
+autograd.anomaly_mode.set_detect_anomaly(False)
+autograd.profiler.profile(False)
 
 
 def get_trainer(stopping_threshold:float, epochs:int, min_epochs:int, log_dir:str):
@@ -19,11 +23,18 @@ def get_trainer(stopping_threshold:float, epochs:int, min_epochs:int, log_dir:st
         monitor="val_accuracy",
         stopping_threshold=stopping_threshold,
         mode='max',
-        patience=3
+        patience=7
     )
+    mc = ModelCheckpoint(
+        dirpath=log_dir, 
+        filename='best_model_so_far',
+        save_top_k=1, 
+        monitor="val_loss", 
+        mode='min',
+        every_n_epochs=5)
     trainer = pl.Trainer(
         default_root_dir=log_dir,
-        callbacks= [cb, early_stopping],
+        callbacks= [cb, mc],
         precision=16,
         benchmark=True,
         accelerator='auto', 
@@ -38,17 +49,16 @@ def training_pipeline(
         dataset_dir:str, 
         root_outputs_dir:str, 
         subject:str,
-        imsize:tuple=CONST.DEFAULT_IMSIZE(),
-        polygoned=False,
-        colorized_scar=False,
+        imsize:tuple=(256,256),
         patch_localization:bool=False,
-        batch_size:int=CONST.DEFAULT_BATCH_SIZE(),
-        train_val_split:float=CONST.DEFAULT_TRAIN_VAL_SPLIT(),
-        seed:int=CONST.DEFAULT_SEED(),
-        projection_training_lr:float=CONST.DEFAULT_LEARNING_RATE(),
-        projection_training_epochs:int=CONST.DEFAULT_EPOCHS(),
+        batch_size:int=32,
+        train_val_split:float=0.2,
+        seed:int=0,
+        projection_training_lr:float=0.03,
+        projection_training_epochs:int=30,
         fine_tune_lr:float=0.001,
         fine_tune_epochs:int=20):
+    cudnn.benchmark = True
     
     if patch_localization:
         result_path = root_outputs_dir+subject+'/patch_level/'
@@ -65,15 +75,13 @@ def training_pipeline(
     
     print('result dir:', result_path)
     print('checkpoint name:', checkpoint_name)
-    print('polygoned:', polygoned)
-    print('colorized scar:', colorized_scar)
     print('patch localization:', patch_localization)
     
     np.random.seed(seed)
     random.seed(seed)
     
     print('>>> preparing datamodule')
-    datamodule = GenerativeDatamodule(
+    datamodule = PretextTaskDatamodule(
         subject,
         dataset_dir+subject+'/',
         imsize=imsize,
@@ -83,50 +91,46 @@ def training_pipeline(
         duplication=True,
         min_dataset_length=1000,
         patch_localization=patch_localization,
-        polygoned=polygoned,
-        colorized_scar=colorized_scar,
         patch_size=32
     )
-    pretext_model = PeraNet(
-        latent_space_dims=[512,512,512,512,512],
-        #latent_space_dims=[512,512,512,512,512,512,512,512,512],
-        num_classes=3, lr=projection_training_lr, num_epochs=projection_training_epochs)
+    datamodule.setup()
+    pretext_model = PeraNet()
+    pretext_model.compile(
+        learning_rate=projection_training_lr,
+        epochs=projection_training_epochs
+    )
     pretext_model.freeze_net(['backbone'])
-    trainer, cb = get_trainer(0.8, projection_training_epochs, min_epochs=5, log_dir=result_path+'logs/')
-    pretext_model.num_training_batches = trainer.num_training_batches
+    trainer, cb = get_trainer(0.9, projection_training_epochs, min_epochs=3, log_dir=result_path+'logs/')
     print('>>> start training (LATENT SPACE)')
     trainer.fit(pretext_model, datamodule=datamodule)
     print('>>> training plot')
     plot_history(cb.log_metrics, result_path, mode='training')
-    #trainer.save_checkpoint(result_path+checkpoint_name)
-    
+    pretext_model.clear_memory_bank()
     print('>>> setting up the model (fine tune whole net)')
-    #pretext_model:PeraNet = PeraNet.load_from_checkpoint(result_path+'best_model.ckpt')
-    pretext_model.num_epochs = 20
-    pretext_model.lr = 0.01
+    pretext_model.num_epochs = fine_tune_epochs
+    pretext_model.lr = fine_tune_lr
     pretext_model.unfreeze()
-    trainer, cb = get_trainer(0.98, fine_tune_epochs, min_epochs=5, log_dir=result_path+'logs/')
+    trainer, cb = get_trainer(0.995, fine_tune_epochs, min_epochs=20, log_dir=result_path+'logs/')
     print('>>> start training (WHOLE NET)') 
     trainer.fit(pretext_model, datamodule=datamodule)
+    
     trainer.save_checkpoint(result_path+checkpoint_name)
+    print(pretext_model.memory_bank.shape)
     print('>>> training plot')
     plot_history(cb.log_metrics, result_path, mode='fine_tune')
-    trainer.save_checkpoint(result_path+checkpoint_name)
 
 
 def run(
         experiments_list:list,
         dataset_dir:str, 
         root_outputs_dir:str,
-        imsize:tuple=CONST.DEFAULT_IMSIZE(),
-        polygoned=True,
-        colorized_scar=False,
+        imsize:tuple=(256,256),
         patch_localization:bool=False,
-        batch_size:int=CONST.DEFAULT_BATCH_SIZE(),
-        train_val_split:float=CONST.DEFAULT_TRAIN_VAL_SPLIT(),
-        seed:int=CONST.DEFAULT_SEED(),
-        projection_training_lr:float=CONST.DEFAULT_LEARNING_RATE(),
-        projection_training_epochs:int=CONST.DEFAULT_EPOCHS(),
+        batch_size:int=32,
+        train_val_split:float=0.2,
+        seed:int=0,
+        projection_training_lr:float=0.03,
+        projection_training_epochs:int=30,
         fine_tune_lr:float=0.001,
         fine_tune_epochs:int=20):
     
@@ -141,8 +145,6 @@ def run(
             root_outputs_dir=root_outputs_dir, 
             subject=subject,
             imsize=imsize,
-            polygoned=polygoned,
-            colorized_scar=colorized_scar,
             patch_localization=patch_localization,
             batch_size=batch_size,
             train_val_split=train_val_split,
@@ -156,7 +158,8 @@ def run(
 
 
 def get_textures_names():
-    return np.array(['carpet','grid','leather','tile','wood'])
+    return ['carpet','grid','leather','tile','wood']
+
 
 def get_obj_names():
     return np.array([
@@ -173,6 +176,7 @@ def get_obj_names():
         'zipper'
     ])
 
+
 def obj_set_one():
     return [
         'bottle',
@@ -180,6 +184,7 @@ def obj_set_one():
         'capsule',
         'hazelnut',
         'metal_nut']
+
 
 def obj_set_two():
     return [
@@ -189,6 +194,7 @@ def obj_set_two():
         'transistor',
         'zipper']
 
+
 def specials():
     return [
         'cable',
@@ -196,28 +202,24 @@ def specials():
         'pill',
         'screw']
 
+
 if __name__ == "__main__":
 
     experiments = get_all_subject_experiments('dataset/')
     textures = get_textures_names()
     obj1 = obj_set_one()
     obj2 = obj_set_two()
+    experiments_list = obj2
+    outputdir = 'brutta_copia/patch_32/patch_32_updated/computations/'
     run(
-        experiments_list=['bottle'],
+        experiments_list=experiments_list,
         dataset_dir='dataset/', 
-        root_outputs_dir='brutta_brutta_copia/computations/',
+        root_outputs_dir=outputdir,
         imsize=(256,256),
-        polygoned=True,
-        colorized_scar=True,
-        patch_localization=True,
-        batch_size=32,
-        train_val_split=0.2,
-        seed=0,
+        patch_localization=False,
+        batch_size=96,
         projection_training_lr=0.03,
-        projection_training_epochs=30,
-        fine_tune_lr=0.01,
-        fine_tune_epochs=20
+        projection_training_epochs=10,
+        fine_tune_lr=0.005,
+        fine_tune_epochs=50
     )
-        
-        
-        

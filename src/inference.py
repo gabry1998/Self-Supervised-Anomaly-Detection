@@ -1,12 +1,13 @@
 import shutil
 from self_supervised.gradcam import GradCam
-from self_supervised.model import GDE, PeraNet
-from self_supervised.datasets import MVTecDatamodule, GenerativeDatamodule
+from self_supervised.models import GDE, PeraNet
+from self_supervised.datasets import MVTecDatamodule, PretextTaskDatamodule
 from tqdm import tqdm
-import self_supervised.support.constants as CONST
-from self_supervised.support.functional import \
-    get_all_subject_experiments, get_prediction_class, heatmap2mask, multiclass2binary, normalize
-import self_supervised.support.visualization as vis
+from self_supervised.functional import \
+    get_all_subject_experiments, get_prediction_class, normalize
+from self_supervised.converters import \
+    heatmap2mask, multiclass2binary
+import self_supervised.visualization as vis
 import self_supervised.metrics as mtr
 import time
 import random
@@ -30,9 +31,9 @@ def inference_pipeline(
         polygoned:bool=False,
         colorized_scar:bool=False,
         patch_localization=False,
-        seed:int=CONST.DEFAULT_SEED(),
-        batch_size:int=CONST.DEFAULT_BATCH_SIZE(),
-        imsize:int=CONST.DEFAULT_IMSIZE(),
+        seed:int=0,
+        batch_size:int=32,
+        imsize:int=(256,256),
         tracker:Tracker=None):
     
     if os.path.exists('lightning_logs/'):
@@ -55,7 +56,7 @@ def inference_pipeline(
     peranet.eval()
     tester = pl.Trainer(accelerator='auto', devices=1)
     print('>>> Generating test dataset (artificial)')
-    artificial = GenerativeDatamodule(
+    artificial = PretextTaskDatamodule(
         subject,
         dataset_dir+subject+'/',
         imsize=imsize,
@@ -72,7 +73,6 @@ def inference_pipeline(
     print('>>> loading mvtec dataset')
     mvtec = MVTecDatamodule(
                 dataset_dir+subject+'/',
-                subject=subject,
                 imsize=imsize,
                 batch_size=batch_size,
                 seed=seed
@@ -199,7 +199,7 @@ def run(
         colorized_scar=False,
         patch_localization=False,
         batch_size:int=128,
-        imsize:int=CONST.DEFAULT_IMSIZE()):
+        imsize:int=(256,256)):
     
     os.system('clear')
     assert(len(seed_list) == num_experiments_for_each_subject)

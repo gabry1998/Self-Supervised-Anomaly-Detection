@@ -1,38 +1,51 @@
 from tqdm import tqdm
 from skimage.segmentation import slic
 from skimage import color
-from self_supervised.support.dataset_generator import *
-from self_supervised.support.functional import *
-from self_supervised.datasets import GenerativeDatamodule
-from self_supervised.support.cutpaste_parameters import CPP
-from skimage.measure import regionprops
+from self_supervised.dataset_generator import *
+from self_supervised.functional import *
+from self_supervised.converters import *
+from self_supervised.datasets import PretextTaskDatamodule, CPP
 from torchvision import transforms
-from PIL import Image, ImageFilter, ImageOps
+from PIL import Image, ImageEnhance, ImageFilter
 import matplotlib.pyplot as plt
 import numpy as np
-import time
 import os
 import collections
-import cv2 
 
 
 
 def do_patch(img, image_for_cutting=None, segmentation=None, patch_loc=False):
-    factor = 1 if patch_loc else 2
+    factor = 1 if patch_loc else 1.75
     segmentation = np.array(segmentation.convert('1'))
     coordinates = np.flip(np.column_stack(np.where(segmentation == 1)), axis=1)
     coords = get_random_coordinate(coordinates)
     image_for_cutting = image_for_cutting.rotate(random.choice([90,180,270]))
-    patch = generate_patch(
+    a = generate_patch(
         image_for_cutting,
         area_ratio=CPP.rectangle_area_ratio,
         aspect_ratio=CPP.rectangle_aspect_ratio,
-        augs=CPP.jitter_transforms
     )
-    
-    if check_patch_and_defect_similarity(img, patch) > 0.999:
-        patch = ImageOps.invert(patch)
-    coords, _ = check_valid_coordinates_by_container(
+    b = generate_patch(
+        image_for_cutting,
+        area_ratio=CPP.rectangle_area_ratio,
+        aspect_ratio=CPP.rectangle_aspect_ratio,
+        colorized=True,
+        color_type='average'
+    )
+    c = generate_patch(
+        image_for_cutting,
+        area_ratio=CPP.rectangle_area_ratio,
+        aspect_ratio=CPP.rectangle_aspect_ratio,
+        colorized=True,
+        color_type='random'
+    )
+    patch = random.choice([a,b,c])
+    if check_color_similarity(img, patch) > 0.99:
+        low = np.random.uniform(0.3, 0.5)
+        high = np.random.uniform(1.5, 1.7)
+        patch = ImageEnhance.Brightness(patch).enhance(random.choice([low, high]))
+        patch = ImageEnhance.Contrast(patch).enhance(random.choice([low, high]))
+    coords = check_valid_coordinates_by_container(
         img.size, 
         patch.size, 
         current_coords=coords,
@@ -40,35 +53,52 @@ def do_patch(img, image_for_cutting=None, segmentation=None, patch_loc=False):
     )
     mask = None
     mask = rect2poly(patch, regular=False, sides=8)
-    
+    #mask = mask.filter(ImageFilter.GaussianBlur(1))
     x = paste_patch(img, patch, coords, mask)
     return x
 
 
 def do_scar(img, image_for_cutting=None, segmentation=None, patch_loc=False):
-    factor = 1 if patch_loc else 2.5
+    factor = 1 if patch_loc else 2
     segmentation = np.array(segmentation.convert('1'))
     coordinates = np.flip(np.column_stack(np.where(segmentation == 1)), axis=1)
     coords = get_random_coordinate(coordinates)
     image_for_cutting = image_for_cutting.rotate(random.choice([90,180,270]))
-    scar= generate_patch(
+    a = generate_patch(
+        image_for_cutting,
+        area_ratio=CPP.scar_area_ratio,
+        aspect_ratio=CPP.scar_aspect_ratio
+    )
+    b = generate_patch(
         image_for_cutting,
         area_ratio=CPP.scar_area_ratio,
         aspect_ratio=CPP.scar_aspect_ratio,
-        #augs=CPP.jitter_transforms
+        colorized=True,
+        color_type='average'
     )
-    if check_patch_and_defect_similarity(img, scar) > 0.99:
-        scar = ImageOps.invert(scar)
+    c = generate_patch(
+        image_for_cutting,
+        area_ratio=CPP.scar_area_ratio,
+        aspect_ratio=CPP.scar_aspect_ratio,
+        colorized=True,
+        color_type='random'
+    )
+    scar = random.choice([a,b,c])
+    if check_color_similarity(img, scar) > 0.99:
+        low = np.random.uniform(0.3, 0.5)
+        high = np.random.uniform(1.5, 1.7)
+        scar = ImageEnhance.Brightness(scar).enhance(random.choice([low, high]))
+        scar = ImageEnhance.Brightness(scar).enhance(random.choice([low, high]))
     angle = random.randint(-45,45)
     scar = scar.convert('RGBA')
     scar = scar.rotate(angle, expand=True)
-    coords, _ = check_valid_coordinates_by_container(
+    coords = check_valid_coordinates_by_container(
         img.size, 
         scar.size, 
         current_coords=coords,
         container_scaling_factor=factor
     )
-    
+    #scar = scar.filter(ImageFilter.GaussianBlur(1))
     x = paste_patch(img, scar, coords, scar)
     return x
 
@@ -123,12 +153,6 @@ def plot_together(good, def1, def2=None, masks=None, saving_path=None, name='plo
     plt.close()
 
 
-def get_superpixels(image, segm):
-    image_array = np.array(image)
-    segments = slic(image_array, n_segments = segm, sigma = 5, convert2lab=True)
-    superpixels = color.label2rgb(segments, image_array, kind='avg')
-    return superpixels
-
 def test_augmentations(patch_localization = False):
     imsize=(256,256)
     patchsize = 32
@@ -136,7 +160,7 @@ def test_augmentations(patch_localization = False):
     classes = get_all_subject_experiments('dataset/')
     for i in tqdm(range(len(subjects))):
         sub = subjects[i]
-        images = get_image_filenames('dataset/'+sub+'/train/good/')
+        images = get_filenames('dataset/'+sub+'/train/good/')
         goods = []
         masks = []
         patches = []
@@ -147,7 +171,7 @@ def test_augmentations(patch_localization = False):
         else:
             fixed_segmentation = obj_mask(Image.open('dataset/'+sub+'/train/good/000.png').resize(imsize).convert('RGB'))
         
-        for i in tqdm(range(6)):
+        for i in tqdm(range(12)):
             img = Image.open(images[i]).resize(imsize).convert('RGB')
             
             # mask geneneration
@@ -156,14 +180,12 @@ def test_augmentations(patch_localization = False):
             else:
                 mask = fixed_segmentation
             
-            # image for cut
             if sub in np.array(['carpet','grid','leather','tile','wood']):
-                idx = np.where(classes == sub)
-                random_subject = random.choice(np.delete(classes, idx))
+                random_subject = random.choice(classes)
                 cutting = Image.open('dataset/'+random_subject+'/train/good/000.png').resize(imsize).convert('RGB')
             else:
                 cutting = img.copy()
-            
+                
             # crop if patch localization
             if patch_localization:
                 left = random.randint(0,img.size[0]-patchsize)
@@ -179,18 +201,21 @@ def test_augmentations(patch_localization = False):
             else:
                 patch = x.copy()
                 scar = x.copy()
+            x = CPP.jitter_transforms(x)
+            patch = CPP.jitter_transforms(patch)
+            scar = CPP.jitter_transforms(scar)
             goods.append(np.array(x))
             patches.append(np.array(patch))
             scars.append(np.array(scar))
             masks.append(np.array(mask))
         
         if patch_localization:
-            plot_together(goods, patches, scars, masks, 'brutta_copia/dataset_analysis/'+sub+'/', sub+'_artificial_crop.png')
+            plot_together(goods, patches, scars, masks, 'brutta_copia/patch_32_updated/dataset_analysis/'+sub+'/', sub+'_artificial_crop.png')
         else:
-            plot_together(goods, patches, scars, masks, 'brutta_copia/dataset_analysis/'+sub+'/', sub+'_artificial.png')
+            plot_together(goods, patches, scars, masks, 'brutta_copia/patch_32_updated/dataset_analysis/'+sub+'/', sub+'_artificial.png')
         os.system('clear')
-     
-
+        
+        
 def check_all_subject(patch_localization = False):
     subjects = get_all_subject_experiments('dataset/')
     imsize=(256,256)
@@ -214,19 +239,18 @@ def check_all_subject(patch_localization = False):
 
         # image for cut
         if subject in np.array(['carpet','grid','leather','tile','wood']):
-            idx = np.where(classes == subject)
-            random_subject = random.choice(np.delete(classes, idx))
+            random_subject = random.choice(classes)
             cutting = Image.open('dataset/'+random_subject+'/train/good/000.png').resize(imsize).convert('RGB')
         else:
             cutting = img.copy()
-        
+            
         # patch loc -> crop
         if patch_localization:
             left = random.randint(0,img.size[0]-patchsize)
             top = random.randint(0,img.size[1]-patchsize)
             x = img.crop((left,top, left+patchsize, top+patchsize))
             mask = mask.crop((left,top, left+patchsize, top+patchsize))
-            cutting = transforms.RandomCrop(patchsize)(cutting)
+            cutting = transforms.RandomCrop(patchsize)(img)
         else:
             x = img.copy()
         if torch.sum(transforms.ToTensor()(mask)) > int((patchsize*patchsize)/2):
@@ -235,21 +259,24 @@ def check_all_subject(patch_localization = False):
         else:
             patch = x.copy()
             scar = x.copy()
+        x = CPP.jitter_transforms(x)
+        patch = CPP.jitter_transforms(patch)
+        scar = CPP.jitter_transforms(scar)
         goods.append(np.array(x))
         patches.append(np.array(patch))
         scars.append(np.array(scar))
         masks.append(np.array(mask))
     
     if patch_localization:
-        plot_together(goods, patches, scars, masks, 'brutta_copia/dataset_analysis/', 'artificial_overall_crop.png')
+        plot_together(goods, patches, scars, masks, 'brutta_copia/patch_32_updated/dataset_analysis/', 'artificial_overall_crop.png')
     else:
-        plot_together(goods, patches, scars, masks, 'brutta_copia/dataset_analysis/', 'artificial_overall.png')
+        plot_together(goods, patches, scars, masks, 'brutta_copia/patch_32_updated/dataset_analysis/', 'artificial_overall.png')
 
     os.system('clear')
 
 
 def check_distribution():
-    artificial = GenerativeDatamodule(
+    artificial = PretextTaskDatamodule(
         'bottle',
         'dataset/bottle/',
         (256,256),
@@ -280,10 +307,12 @@ def check_distribution():
     plt.ylabel('Frequency', fontdict=font)
     plt.xticks([0,1,2], ['good', 'polygon patch','scar'], font=font)
     plt.savefig('distribution.png', bbox_inches='tight')
-    
-test_augmentations(True)
-check_all_subject(True)
-#check_distribution()
+
+
+if __name__ == "__main__":
+    test_augmentations(False)
+    check_all_subject(False)
+    #check_distribution()
 
 
 
