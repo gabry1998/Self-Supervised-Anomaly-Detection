@@ -40,6 +40,7 @@ Having length and height of the rectangle, a region of the image is cut within 4
 If the element in question is a texture (for example *carpet*), the cut is done by taking an image of a random element in the mvtec dataset (for example a portion from an image of the *bottle* object is taken). This is to avoid that the cut part, once pasted on the original image, gets confused too much with it.
 Since carrying out cutting operations to obtain non-regular polygons could be complicated, the idea is to construct a binary mask of the aforementioned polygon, to be subsequently applied on the rectangle just obtained. For each side of the rectangle, 1 or 2 points are chosen, thus obtaining a polygon with a minimum of 4 sides and a maximum of 8. The points are generated in such a way that the polygon is convex.
 <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/readme_images/polygon_points.png"/>
+
 The mask is generated such that the pixels are equal to 0 if outside the polygon, 1 otherwise.
 <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/readme_images/patch_to_polygon.png"/>
 
@@ -62,3 +63,58 @@ A set of coordinates is extracted from the mask, from which a pair (x,y) is then
 ### Example
 <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/dataset_analysis/screw/screw_artificial.png"/>
 
+<br>
+
+## Model
+The architecture of the network is structured as follows: a ResNet-18 is taken as the backbone, suitably modified to also use the intermediate outputs of convolutional blocks 2 and 3. The backbone is followed by a fully-connected which takes care of both concatenating layer2, layer3, layer4 outputs and reduce the number of features. Then there is a projection head, a series of fully-connected to process the features and obtain them in the form of a linear vector. The output of the projection head is connected to a classifier during the pretext task, otherwise to an anomaly detector, where given an input vector the cosine similarity is calculated with a vector of features representing the "normality", subsequently returning an anomaly score in [0,1].
+
+<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/readme_images/model.png"/>
+
+Each block of the projection head is composed of a fully connected, a batch normalization and a ReLU function.
+
+<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/readme_images/block.png"/>
+
+### Training
+One model is trained for each element class of the MVTec dataset (15 models in total).
+The backbone is loaded with imagenet weights.
+Each model is trained on ```epochs=10``` with ```learning_rate=0.03```, only changing the projection head weights.
+Then a training is done unlocking the whole network with ```epochs=50``` and ```learning_rate=0.005```. The optimizer used is SGD with ```momentum=0.9```, with ```weight_decay=0.0005```, on which a Learning Rate Scheduler (Cosine Annealing Schedule) is subsequently applied.
+A ```batch_size=96``` is used and since the training data are few (about 200/300 images per mvtec element), they are duplicated to obtain a minimum of 1000 filenames.
+
+
+During the training phase a memory bank with size 500 is used. The purpose of the memory bank is to memorize the embedding vectors representing the normal data. During the training step, for each batch the embedding vectors with label ```y=0``` and predicted with ```y_hat=0``` are filtered and inserted into the memory bank. At the end of each epoch the excess data in the memory bank are eliminated, discarding the oldest ones.
+
+
+To perform a patch-level and not image-level approach, before applying geometric transformations to the images, they are randomly cropped with a ```patch_size=32```.
+
+## Inference
+In the inference phase, the embedding vector of an image is extracted and subsequently given as input to an Anomaly Detector. The anomaly score is calculated by evaluating the average distance between the edging vector and 3 vectors considered "normal", taken from the memory bank with the Nearest Neighbor approach. The metric for distance is Cosine Similarity.
+
+For the patch-level approach, the test image is decomposed into small patches with ```patch_size=32``` and with ```stride=8```.
+
+## Localization
+For the image-level approach the GradCam is used to obtain an anomaly map relating to a test image. For the patch-level approach, an embedding vector is extracted for each patch and its anomaly score calculated, as presented previously. Subsequently an upsampling with bilinear interpolation is done to obtain an anomaly map of dimensions equal to the test image.
+
+## Results
+### Objects
+
+|    | bottle | cable | capsule | hazelnut | metal_nut 
+|:---:|:---:|:---:|:---:|:---:| :---: |
+| roc (classification) | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/bottle/image_level/image_roc.png"/>    | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/cable/image_level/image_roc.png"/>    | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/capsule/image_level/image_roc.png"/>     | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/hazelnut/image_level/image_roc.png"/>     | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/metal_nut/image_level/image_roc.png"/>      |
+| roc (localization) | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/bottle/patch_level/pixel_roc.png"/>    | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/cable/patch_level/pixel_roc.png"/>    | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/capsule/patch_level/pixel_roc.png"/>     | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/hazelnut/patch_level/pixel_roc.png"/>  | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/metal_nut/patch_level/pixel_roc.png"/>     |
+| tsne |  <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/bottle/image_level/bottle_tsne.png"/>  |  <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/cable/image_level/cable_tsne.png"/>   |  <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/capsule/image_level/capsule_tsne.png"/>   | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/hazelnut/image_level/hazelnut_tsne.png"/>    |  <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/metal_nut/image_level/metal_nut_tsne.png"/>     |
+
+
+|    | pill | screw | toothbrush | transistor | zipper 
+|:---:|:---:|:---:|:---:|:---:| :---: |
+| roc (classification) | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/pill/image_level/image_roc.png"/>    | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/screw/image_level/image_roc.png"/>    | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/toothbrush/image_level/image_roc.png"/>     | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/transistor/image_level/image_roc.png"/>     | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/zipper/image_level/image_roc.png"/>      |
+| roc (localization) | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/pill/patch_level/pixel_roc.png"/>    | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/screw/patch_level/pixel_roc.png"/>    | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/toothbrush/patch_level/pixel_roc.png"/>     | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/transistor/patch_level/pixel_roc.png"/>  | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/zipper/patch_level/pixel_roc.png"/>     |
+| tsne |  <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/pill/image_level/pill_tsne.png"/>  |  <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/screw/image_level/screw_tsne.png"/>   |  <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/toothbrush/image_level/toothbrush_tsne.png"/>   | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/transistor/image_level/transistor_tsne.png"/>    |  <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/zipper/image_level/zipper_tsne.png"/>     |
+
+### Textures
+
+|    | carpet | grid | leather | tile | wood 
+|:---:|:---:|:---:|:---:|:---:| :---: |
+| roc (classification) | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/carpet/image_level/image_roc.png"/>    | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/grid/image_level/image_roc.png"/>    | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/leather/image_level/image_roc.png"/>     | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/tile/image_level/image_roc.png"/>     | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/wood/image_level/image_roc.png"/>      |
+| roc (localization) | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/carpet/patch_level/pixel_roc.png"/>    | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/grid/patch_level/pixel_roc.png"/>    | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/leather/patch_level/pixel_roc.png"/>     | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/tile/patch_level/pixel_roc.png"/>  | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/wood/patch_level/pixel_roc.png"/>     |
+| tsne |  <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/carpet/image_level/carpet_tsne.png"/>  |  <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/grid/image_level/grid_tsne.png"/>   |  <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/leather/image_level/leather_tsne.png"/>   | <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/tile/image_level/tile_tsne.png"/>    |  <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/wood/image_level/wood_tsne.png"/>     |
