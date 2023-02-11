@@ -100,8 +100,8 @@ For the image-level approach the GradCam is used to obtain an anomaly map relati
 ### Objects
 <table>
     <td></td>
-    <td>roc (classification)</td>
-    <td>roc (localization)</td>
+    <td>roc (classification image level)</td>
+    <td>roc (localization patch level)</td>
     <td>tsne</td>
     <tr>
         <td>bottle</td>
@@ -137,8 +137,8 @@ For the image-level approach the GradCam is used to obtain an anomaly map relati
 
 <table>
     <td></td>
-    <td>roc (classification)</td>
-    <td>roc (localization)</td>
+    <td>roc (classification image level)</td>
+    <td>roc (localization patch level)</td>
     <td>tsne</td>
     <tr>
         <td>pill</td>
@@ -175,8 +175,8 @@ For the image-level approach the GradCam is used to obtain an anomaly map relati
 ### Textures
 <table>
     <td></td>
-    <td>roc (classification)</td>
-    <td>roc (localization)</td>
+    <td>roc (classification image level)</td>
+    <td>roc (localization patch level)</td>
     <td>tsne</td>
     <tr>
         <td>carpet</td>
