@@ -203,13 +203,13 @@ def obj_set_two():
 
 if __name__ == "__main__":
     dataset_dir='dataset/'
-    root_inputs_dir='brutta_copia/patch_32/patch_32_image_50_epochs/computations'
-    root_outputs_dir='brutta_copia/patch_32/patch_32_image_50_epochs/localization/'
+    root_inputs_dir='outputs/computations/'
+    root_outputs_dir='outputs/localization/'
     imsize=(256,256)
     patch_dim = 32
     stride=8
     seed=123456789
-    patch_localization=False
+    patch_localization=True
       
     experiments = get_all_subject_experiments('dataset/')
     textures = get_textures_names()
