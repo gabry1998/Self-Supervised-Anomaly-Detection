@@ -362,21 +362,30 @@ def evaluate(
             aupros, 
             np.mean(aupros))
         scores = mtr.metrics_to_dataframe(metric_dict, np.array(experiments_list+['average']))
-        mtr.export_dataframe(scores, saving_path=root_outputs_dir, name='image_all_scores.csv')
+        if patch_localization:
+            mtr.export_dataframe(scores, saving_path=root_outputs_dir, name='patch_all_scores.csv')
+        else:
+            mtr.export_dataframe(scores, saving_path=root_outputs_dir, name='image_all_scores.csv')
     textures_scores = None
     if len(textures_names) > 0:
         textures_scores:pd.DataFrame = scores.loc[textures_names]
         textures_avg = textures_scores.mean(axis='index').to_dict()
         textures_avg = pd.DataFrame(textures_avg, columns=textures_scores.keys(), index=['average'])
         textures_scores = pd.concat([textures_scores, textures_avg])
-        mtr.export_dataframe(textures_scores, saving_path=root_outputs_dir, name='image_textures_scores.csv')
+        if patch_localization:
+            mtr.export_dataframe(textures_scores, saving_path=root_outputs_dir, name='patch_textures_scores.csv')
+        else:
+            mtr.export_dataframe(textures_scores, saving_path=root_outputs_dir, name='image_textures_scores.csv')
     objects_scores = None
     if len(objects_names) > 0:
         objects_scores:pd.DataFrame = scores.loc[objects_names]
         objects_avg = objects_scores.mean(axis='index').to_dict()
         objects_avg = pd.DataFrame(objects_avg, columns=objects_avg.keys(), index=['average'])
         objects_scores = pd.concat([objects_scores, objects_avg])
-        mtr.export_dataframe(objects_scores, saving_path=root_outputs_dir, name='image_objects_scores.csv')
+        if patch_localization:
+            mtr.export_dataframe(objects_scores, saving_path=root_outputs_dir, name='patch_objects_scores.csv')
+        else:
+            mtr.export_dataframe(objects_scores, saving_path=root_outputs_dir, name='image_objects_scores.csv')
         
     return scores, textures_scores, objects_scores  
     
@@ -392,12 +401,12 @@ if __name__ == "__main__":
     
     evaluate(
         dataset_dir='dataset/',
-        root_inputs_dir='brutta_copia/patch_32/patch_32_updated/computations/',
-        root_outputs_dir='brutta_copia/patch_32/patch_32_updated/computations/',
+        root_inputs_dir='outputs/computations/',
+        root_outputs_dir='outputs/computations/',
         imsize=(256,256),
         patch_dim = 32,
         stride=8,
         seed=123456789,
-        patch_localization=False,
+        patch_localization=True,
         experiments_list=experiments_list
     )
