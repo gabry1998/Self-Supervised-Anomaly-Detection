@@ -51,8 +51,8 @@ def specials():
 
 
 if __name__ == "__main__":
-    inputdir = 'brutta_copia/patch_32/patch_32_200epochs/computations/'
-    outputdir = 'brutta_copia/patch_32/patch_32_200epochs/computations/'
+    inputdir = 'brutta_copia/patch_32/patch_32_image_50_epochs/computations/'
+    outputdir = 'brutta_copia/patch_32/patch_32_image_50_epochs/computations/'
     experiments = get_all_subject_experiments('dataset/')
     textures = get_textures_names()
     obj1 = obj_set_one()
@@ -77,7 +77,7 @@ if __name__ == "__main__":
         projection_training_lr=0.03,
         projection_training_epochs=10,
         fine_tune_lr=0.005,
-        fine_tune_epochs=200
+        fine_tune_epochs=50
     )
     
     # end training, notify

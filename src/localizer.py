@@ -37,7 +37,7 @@ class Localizer:
         self.subject = subject
         self.root_input_dir = root_input_dir,
         self.root_output_dir = root_output_dir
-        self.outputs_dir = root_output_dir+subject+'/'+mode+'/gradcam/'
+        self.outputs_dir = root_output_dir+subject+'/'+mode+'/'
         
         self.model_name = model_name
         self.imsize = imsize
@@ -203,8 +203,8 @@ def obj_set_two():
 
 if __name__ == "__main__":
     dataset_dir='dataset/'
-    root_inputs_dir='brutta_copia/patch_32/patch_32_updated/computations/'
-    root_outputs_dir='brutta_copia/patch_32/patch_32_updated/localization/'
+    root_inputs_dir='brutta_copia/patch_32/patch_32_image_50_epochs/computations'
+    root_outputs_dir='brutta_copia/patch_32/patch_32_image_50_epochs/localization/'
     imsize=(256,256)
     patch_dim = 32
     stride=8

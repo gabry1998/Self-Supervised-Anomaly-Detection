@@ -29,11 +29,11 @@ class CPP:
     jitter_offset = 0.3
         
     #rectangle_area_ratio = (0.1, 0.2) # patch-wise
-    rectangle_area_ratio = (0.05, 0.1) # image-wise
+    rectangle_area_ratio = (0.03, 0.1) # image-wise
     rectangle_aspect_ratio = ((0.3, 1),(1, 3.3))
 
     #scar_area_ratio = (0.01, 0.02) # patch-wise
-    scar_area_ratio = (0.005, 0.01) # image-wise
+    scar_area_ratio = (0.003, 0.007) # image-wise
     scar_aspect_ratio = ((0.05, 0.5),(2.5, 3.3))
 
     jitter_transforms = transforms.ColorJitter(
