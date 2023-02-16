@@ -78,37 +78,7 @@ if __name__ == "__main__":
         projection_training_epochs=10,
         fine_tune_lr=0.005,
         fine_tune_epochs=50
-    )
-    
-    # end training, notify
-    
-    now = datetime.now()
-    end = now.strftime("%d/%m/%Y %H:%M:%S")
-    msg = '''\
-    <html>
-    <head>
-    Training completato. <br>
-    Inizio: {start} <br>
-    Fine: {end} <br>
-    Training effettuato su: <br> 
-    {objs}
-    <br>
-    (orario e' un'ora indietro) <br>
-    </head>
-    <body>
-    </body>
-    </html>'''.format(start=start, end=end, objs=subjects)
-    text = MIMEText(msg,'html')
-    with smtplib.SMTP_SSL('smtp.gmail.com', 465) as connection:  
-        email_address = 'server.lab.peranet@gmail.com'
-        email_password = 'qzpykdqppygcfqtm'
-        connection.login(email_address, email_password)
-        connection.sendmail(
-            from_addr=email_address, 
-            to_addrs='gabrymad998@gmail.com', 
-            msg='subject:Training \n'+text.as_string())
-        
-        
+    )        
         
     # start evaluation
     now = datetime.now()
@@ -133,33 +103,3 @@ if __name__ == "__main__":
         scores2 = ''
     else:
         scores2 = obj_scores.to_html()
-    # end evaluation, notify
-    now = datetime.now()
-    end = now.strftime("%d/%m/%Y %H:%M:%S")
-    msg = '''\
-    <html>
-    <head>
-    Test completati. <br>
-    Inizio: {start} <br>
-    Fine: {end} <br>
-    Test effettuati su: <br> 
-    {objs}
-    <br>
-    (orario e' un'ora indietro) <br>
-    </head>
-    <body>
-    {df1}
-    <br>
-    <br>
-    {df2}
-    </body>
-    </html>'''.format(df1=scores1, df2=scores2, start=start, end=end, objs=subjects)
-    text = MIMEText(msg,'html')
-    with smtplib.SMTP_SSL('smtp.gmail.com', 465) as connection:  
-        email_address = 'server.lab.peranet@gmail.com'
-        email_password = 'qzpykdqppygcfqtm'
-        connection.login(email_address, email_password)
-        connection.sendmail(
-            from_addr=email_address, 
-            to_addrs='gabrymad998@gmail.com', 
-            msg="subject:Risultati \n"+text.as_string())

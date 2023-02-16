@@ -121,6 +121,8 @@ class Evaluator:
     
     
     def evaluate(self):
+        if os.path.exists('lightning_logs/'):
+            shutil.rmtree('lightning_logs/')
         peranet:PeraNet = PeraNet.load_from_checkpoint(
             self.model_dir+self.model_name
         )
@@ -402,10 +404,10 @@ if __name__ == "__main__":
     evaluate(
         dataset_dir='dataset/',
         root_inputs_dir='outputs/computations/',
-        root_outputs_dir='outputs/computations/',
+        root_outputs_dir='brutta_copia/bho/computations/',
         imsize=(256,256),
         patch_dim = 32,
-        stride=8,
+        stride=4,
         seed=123456789,
         patch_localization=True,
         experiments_list=experiments_list
