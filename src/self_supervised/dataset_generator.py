@@ -157,7 +157,9 @@ def check_color_similarity(patch:Image.Image, defect:Image.Image) -> float:
     v2 = np.array(rgb2)[None, :]
     out = cosine_similarity(v1, v2)
     return out.squeeze()
-   
+
+
+
    
 def generate_patch(
         image:Image.Image, 
@@ -196,7 +198,7 @@ def generate_patch(
                 random.randint(0,255)
             )
         elif color_type=='sample':
-            rgb = random.choice(['black','white','silver', 'gray','orange'])
+            rgb = random.choice(['black','white','silver', 'gray'])
         elif color_type=='average':
             patch = image.crop((patch_left, patch_top, patch_right, patch_bottom))
             imarray = np.array(patch)
@@ -205,9 +207,6 @@ def generate_patch(
         cropped_patch = Image.new('RGB', (patch_w, patch_h), color=rgb)
     else:
         cropped_patch = image.crop((patch_left, patch_top, patch_right, patch_bottom))
-    
-    if augs:
-        cropped_patch = augs(cropped_patch)
     return cropped_patch
 
 
@@ -249,8 +248,6 @@ def generate_scar(
         scar = Image.new('RGBA', (scar_w, scar_h), color=rgb)
     else:
         scar = image.crop((patch_left, patch_top, patch_right, patch_bottom))
-        if augs:
-            scar = augs(scar)
         if with_padding:
             padding = Image.new(image.mode, (new_width, new_height), color='silver')
             padding.paste(scar, (left, top))

@@ -186,5 +186,79 @@ def show_defect_examples():
     plt.close()
 
 
-show_steps()
+
+def get_polygons():
+    image_for_cutting = Image.open('dataset/transistor/train/good/000.png').resize((512,512)).convert('RGB')
+    
+    fig, axs = plt.subplots(1,9)
+    for i in range(9):
+        t = np.random.choice([0,1,2], p=[0.5, 0.25, 0.25])
+        if t == 0:
+            scar = gntr.generate_patch(
+                image_for_cutting,
+                area_ratio=CPP.rectangle_area_ratio,
+                aspect_ratio=CPP.rectangle_aspect_ratio
+            )
+        if t == 1:
+            scar = gntr.generate_patch(
+                image_for_cutting,
+                area_ratio=CPP.rectangle_area_ratio,
+                aspect_ratio=CPP.rectangle_aspect_ratio,
+                colorized=True,
+                color_type='average'
+            )
+        if t == 2:
+            scar = gntr.generate_patch(
+                image_for_cutting,
+                area_ratio=CPP.rectangle_area_ratio,
+                aspect_ratio=CPP.rectangle_aspect_ratio,
+                colorized=True,
+                color_type='random'
+            )
+        mask = gntr.rect2poly(scar, regular=False, sides=8)
+        to_paste = Image.new('RGB', mask.size, 'black')
+        to_paste.paste(scar, (0,0), mask)
+        axs[i].axis('off')
+        axs[i].imshow(to_paste)
+        
+    plt.savefig('polygons.png', bbox_inches='tight')
+
+
+
+
+def get_scar():
+    image_for_cutting = Image.open('dataset/cable/train/good/000.png').resize((512,512)).convert('RGB')
+    
+    fig, axs = plt.subplots(1,9)
+    for i in range(9):
+        t = np.random.choice([0,1,2], p=[0.5, 0.25, 0.25])
+        if t == 0:
+            scar = gntr.generate_patch(
+                image_for_cutting,
+                area_ratio=CPP.scar_area_ratio,
+                aspect_ratio=CPP.scar_aspect_ratio
+            )
+        if t == 1:
+            scar = gntr.generate_patch(
+                image_for_cutting,
+                area_ratio=CPP.scar_area_ratio,
+                aspect_ratio=CPP.scar_aspect_ratio,
+                colorized=True,
+                color_type='average'
+            )
+        if t == 2:
+            scar = gntr.generate_patch(
+                image_for_cutting,
+                area_ratio=CPP.scar_area_ratio,
+                aspect_ratio=CPP.scar_aspect_ratio,
+                colorized=True,
+                color_type='random'
+            )
+        angle = random.randint(-45,45)
+        s = scar.rotate(angle, expand=True)
+        axs[i].axis('off')
+        axs[i].imshow(s)
+    plt.savefig('scars.png', bbox_inches='tight')
+
+get_polygons()
         

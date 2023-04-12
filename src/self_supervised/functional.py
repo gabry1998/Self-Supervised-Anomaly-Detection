@@ -35,9 +35,9 @@ def get_filenames(main_path:str) -> ndarray:
 
 
 def get_subdirectories(main_path:str) -> ndarray:
-    return np.array([name for name in os.listdir(main_path) if os.path.isdir(
+    return np.array(sorted([name for name in os.listdir(main_path) if os.path.isdir(
                         main_path+'/'+name)
-                    ], dtype=str)
+                    ]), dtype=str)
 
 
 def get_ground_truth_filename(test_filename:str, ground_truth_dir:str):
@@ -92,20 +92,3 @@ def normalize_in_interval(sample_mat:ndarray, interval_min:int, interval_max:int
     x =(sample_mat - np.min(sample_mat)) / (np.max(sample_mat) - np.min(sample_mat)) * (interval_max - interval_min) + interval_min
     x = np.rint(x)
     return x
-
-
-def notify(
-        source:str='server.lab.peranet@gmail.com', 
-        pwd:str='qzpykdqppygcfqtm', 
-        destination:str='gabrymad998@gmail.com', 
-        subject:str='A subject', 
-        message:str='a message example'):
-    
-    text = MIMEText(message,'html')
-    subject = 'subject:'+subject+' \n'
-    with smtplib.SMTP_SSL('smtp.gmail.com', 465) as connection:  
-        connection.login(source, pwd)
-        connection.sendmail(
-            from_addr=source, 
-            to_addrs=destination, 
-            msg=subject+text.as_string())

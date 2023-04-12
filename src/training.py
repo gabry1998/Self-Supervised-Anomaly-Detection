@@ -17,14 +17,8 @@ autograd.anomaly_mode.set_detect_anomaly(False)
 autograd.profiler.profile(False)
 
 
-def get_trainer(stopping_threshold:float, epochs:int, min_epochs:int, log_dir:str):
+def get_trainer(epochs:int, log_dir:str):
     cb = MetricTracker()
-    early_stopping = EarlyStopping(
-        monitor="val_accuracy",
-        stopping_threshold=stopping_threshold,
-        mode='max',
-        patience=7
-    )
     mc = ModelCheckpoint(
         dirpath=log_dir, 
         filename='best_model_so_far',
@@ -40,7 +34,6 @@ def get_trainer(stopping_threshold:float, epochs:int, min_epochs:int, log_dir:st
         accelerator='auto', 
         devices=1, 
         max_epochs=epochs,
-        min_epochs=min_epochs,
         check_val_every_n_epoch=1)
     return trainer, cb
 
@@ -58,12 +51,12 @@ def training_pipeline(
         projection_training_epochs:int=30,
         fine_tune_lr:float=0.001,
         fine_tune_epochs:int=20):
-    cudnn.benchmark = True
+    
     
     if patch_localization:
-        result_path = root_outputs_dir+subject+'/patch_level/'
+        result_path = root_outputs_dir+subject+'/'
     else:
-        result_path = root_outputs_dir+subject+'/image_level/'
+        result_path = root_outputs_dir+subject+'/'
         
     checkpoint_name = 'best_model.ckpt'
     
@@ -77,8 +70,13 @@ def training_pipeline(
     print('checkpoint name:', checkpoint_name)
     print('patch localization:', patch_localization)
     
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    cudnn.deterministic = True
+    cudnn.benchmark = False
     np.random.seed(seed)
     random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
     
     print('>>> preparing datamodule')
     datamodule = PretextTaskDatamodule(
@@ -89,31 +87,62 @@ def training_pipeline(
         train_val_split=train_val_split,
         seed=seed,
         duplication=True,
-        min_dataset_length=1000,
+        min_dataset_length=500,
         patch_localization=patch_localization,
         patch_size=32
     )
     datamodule.setup()
-    pretext_model = PeraNet()
-    pretext_model.compile(
-        learning_rate=projection_training_lr,
-        epochs=projection_training_epochs
-    )
+    pretext_model = PeraNet(
+        learning_rate=projection_training_lr, 
+        epochs=projection_training_epochs)
     pretext_model.freeze_net(['backbone'])
-    trainer, cb = get_trainer(0.9, projection_training_epochs, min_epochs=3, log_dir=result_path+'logs/')
-    print('>>> start training (LATENT SPACE)')
+    
+    cb = MetricTracker()
+    
+    trainer = pl.Trainer(
+        default_root_dir=result_path+'logs/',
+        callbacks= [cb],
+        precision=16,
+        benchmark=True,
+        accelerator='auto', 
+        devices=1, 
+        max_epochs=projection_training_epochs,
+        check_val_every_n_epoch=1)
+    
     trainer.fit(pretext_model, datamodule=datamodule)
     print('>>> training plot')
     plot_history(cb.log_metrics, result_path, mode='training')
     pretext_model.clear_memory_bank()
+    trainer.save_checkpoint(result_path+checkpoint_name, weights_only=True)
+    
     print('>>> setting up the model (fine tune whole net)')
-    pretext_model.num_epochs = fine_tune_epochs
-    pretext_model.lr = fine_tune_lr
+    pretext_model:PeraNet = PeraNet.load_from_checkpoint(
+        result_path+checkpoint_name, 
+        learning_rate=fine_tune_lr,
+        epochs=fine_tune_epochs,
+        stage='fine_tune')
     pretext_model.unfreeze()
-    trainer, cb = get_trainer(0.995, fine_tune_epochs, min_epochs=20, log_dir=result_path+'logs/')
+    print(pretext_model.lr, pretext_model.num_epochs)
+    
+    mc = ModelCheckpoint(
+        dirpath=result_path+'logs/', 
+        filename='best_model_so_far',
+        save_top_k=1, 
+        monitor="val_loss", 
+        mode='min',
+        every_n_epochs=5)
+    cb = MetricTracker()
+    trainer = pl.Trainer(
+        default_root_dir=result_path+'logs/',
+        callbacks= [cb, mc],
+        precision=16,
+        benchmark=True,
+        accelerator='auto', 
+        devices=1, 
+        max_epochs=fine_tune_epochs,
+        check_val_every_n_epoch=1)
     print('>>> start training (WHOLE NET)') 
     trainer.fit(pretext_model, datamodule=datamodule)
-    
     trainer.save_checkpoint(result_path+checkpoint_name)
     print(pretext_model.memory_bank.shape)
     print('>>> training plot')
@@ -209,8 +238,8 @@ if __name__ == "__main__":
     textures = get_textures_names()
     obj1 = obj_set_one()
     obj2 = obj_set_two()
-    experiments_list = obj2
-    outputdir = 'brutta_copia/patch_32/patch_32_updated/computations/'
+    experiments_list = ['cable', 'capsule']
+    outputdir = 'brutta_copia/bho/computations/'
     run(
         experiments_list=experiments_list,
         dataset_dir='dataset/', 
@@ -220,6 +249,6 @@ if __name__ == "__main__":
         batch_size=96,
         projection_training_lr=0.03,
         projection_training_epochs=10,
-        fine_tune_lr=0.005,
+        fine_tune_lr=0.001,
         fine_tune_epochs=50
     )

@@ -1,5 +1,6 @@
 from sklearn.metrics import auc, roc_curve, f1_score
 from torch import Tensor
+from torchmetrics import F1Score
 from sklearn.metrics import classification_report
 from scipy.ndimage.measurements import label
 from bisect import bisect
@@ -11,23 +12,38 @@ import os
 
 
 
-def metrics_to_dataframe(metric_dict:dict, objects:list) -> DataFrame:
-    df = pd.DataFrame(metric_dict, columns=metric_dict.keys(), index=objects)
+def metrics_to_dataframe(metric_dict:dict, objects:list=None) -> DataFrame:
+    if objects is None:
+        df = pd.DataFrame(metric_dict, columns=metric_dict.keys())
+    else:
+        df = pd.DataFrame(metric_dict, columns=metric_dict.keys(), index=objects)
     return df
 
 
-def export_dataframe(dataframe:DataFrame, saving_path:str=None, name:str='report.csv') -> None:
+def export_dataframe(dataframe:DataFrame, saving_path:str=None, name:str='report.csv', mode='csv') -> None:
     if saving_path and not os.path.exists(saving_path):
         os.makedirs(saving_path)
     if saving_path:
-        dataframe.to_csv(saving_path+name)
+        if mode=='latex':
+            dataframe.to_latex(saving_path+name, float_format="%.2f")
+        if mode=='markdown':
+            dataframe.to_markdown(saving_path+name)
+        if mode=='csv':
+            dataframe.to_csv(saving_path+name, float_format="%.2f")
     else:
-        dataframe.to_csv(name)
+        if mode=='latex':
+            dataframe.to_latex(name, float_format="%.3f")
+        if mode=='markdown':
+            dataframe.to_markdown(name)
+        if mode=='csv':
+            dataframe.to_csv(name, float_format="%.2f")
 
 
-def compute_f1(targets:Tensor, predictions:Tensor) -> float:
-    f1 = f1_score(targets, predictions)
-    return f1
+def compute_f1(targets:Tensor, predictions:Tensor, threshold) -> float:
+    f_score = F1Score(threshold=threshold)
+    #f1 = f1_score(targets, predictions)
+    f1 = f_score(predictions, targets)
+    return f1.item()
 
 
 def compute_roc(labels:Tensor, scores:Tensor):

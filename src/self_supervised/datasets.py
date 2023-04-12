@@ -1,6 +1,9 @@
-from PIL import Image, ImageEnhance, ImageFilter
+from PIL import Image, ImageEnhance, ImageFilter, ImageDraw, ImageOps
 from sklearn.model_selection import train_test_split as tts
+from skimage.segmentation import slic
+from skimage import color
 from torch.utils.data import DataLoader, Dataset
+from scipy.signal import savgol_filter
 from torchvision import transforms
 from torchvision.transforms import Compose
 from self_supervised.dataset_generator import \
@@ -23,24 +26,25 @@ import random
 import torch
 import numpy as np
 import pytorch_lightning as pl
+from skimage.transform import swirl
+
 
 
 class CPP:
-    jitter_offset = 0.3
+    jitter_offset = 0.1
         
-    #rectangle_area_ratio = (0.1, 0.2) # patch-wise
-    rectangle_area_ratio = (0.03, 0.1) # image-wise
-    rectangle_aspect_ratio = ((0.3, 1),(1, 3.3))
+    rectangle_area_ratio_patch = (0.2, 0.5) # patch-wise
+    rectangle_area_ratio = (0.03, 0.07) # image-wise
+    rectangle_aspect_ratio = ((0.3, 0.5),(1, 3.3))
 
-    #scar_area_ratio = (0.01, 0.02) # patch-wise
+    scar_area_ratio_patch = (0.02, 0.05) # patch-wise
     scar_area_ratio = (0.003, 0.007) # image-wise
-    scar_aspect_ratio = ((0.05, 0.5),(2.5, 3.3))
+    scar_aspect_ratio = ((0.3, 0.5),(2.5, 3.3))
 
     jitter_transforms = transforms.ColorJitter(
                             brightness = jitter_offset,
                             contrast = jitter_offset,
                             saturation = jitter_offset)
-                            #hue = jitter_offset)
 
 
 class MVTecDataset(Dataset):
@@ -182,19 +186,27 @@ class PretextTaskDataset(Dataset):
         self.patch_localization = patch_localization
         self.patch_size = patch_size
         
+        self.patch_area_ratio = CPP.rectangle_area_ratio_patch if patch_localization else CPP.rectangle_area_ratio
+        self.scar_area_ratio = CPP.scar_area_ratio_patch if patch_localization else CPP.scar_area_ratio
+        
         # load N images, for each object class in dataset
         all_classes = np.array(get_all_subject_experiments('dataset/'))
         self.images_for_cut = [
-            Image.open('dataset/'+sub+'/train/good/000.png').resize(imsize).convert('RGB') \
+            Image.open('dataset/'+sub+'/train/good/000.png').resize(self.imsize).convert('RGB') \
                 for sub in all_classes
         ]
         
         # create a single mask for position-fixed object
         # textures just have a white image
         if self.subject in constants.TEXTURES():
-            self.fixed_segmentation = Image.new(size=imsize, mode='RGB', color='white')
+            self.fixed_segmentation = Image.new(size=self.imsize, mode='RGB', color='white')
         else:
-            temp = Image.open('dataset/'+self.subject+'/train/good/000.png').resize(imsize).convert('RGB')
+            temp = Image.open('dataset/'+self.subject+'/train/good/000.png').resize(self.imsize).convert('RGB')
+            if self.subject == 'cable':
+                image_array = np.array(temp)
+                segments = slic(image_array, n_segments = 5, sigma =2, convert2lab=True)
+                superpixels = color.label2rgb(segments, image_array, kind='avg')
+                temp = Image.fromarray(superpixels).convert('RGB')
             self.fixed_segmentation = obj_mask(temp)
         
     
@@ -204,16 +216,21 @@ class PretextTaskDataset(Dataset):
             self.images_filenames[index])
         original = original.resize(self.imsize).convert('RGB')
         # apply label
-        y = random.randint(0, 2)
+        y = random.randint(0, 3)
         
         # copy original for second use
         x = original.copy()
         
+        if not self.patch_localization and self.subject not in constants.NON_FIXED_OBJECTS():
+            affine = transforms.RandomAffine(3, scale=(1.05,1.1))
+            x = affine(x)
+            
         # get image to crop for artificial defect
         if self.subject in constants.TEXTURES():
             image_for_cutting:Image.Image = random.choice(self.images_for_cut)
         else:
             image_for_cutting = original
+        
         
         # create new masks only for non-fixed objects
         if self.subject in constants.NON_FIXED_OBJECTS():
@@ -227,6 +244,12 @@ class PretextTaskDataset(Dataset):
         
         # crop image if patch-level mode
         if self.patch_localization:
+            if self.subject == 'capsule':
+                x = x.crop((0,50,255,200))
+                segmentation = segmentation.crop((0,50,255,200))
+            if self.subject == 'screw':
+                x = x.crop((25,25,230,230))
+                segmentation = segmentation.crop((25,25,230,230))
             left = random.randint(0,x.size[0]-self.patch_size)
             top = random.randint(0,x.size[1]-self.patch_size)
             x = x.crop((left,top, left+self.patch_size, top+self.patch_size))
@@ -243,22 +266,23 @@ class PretextTaskDataset(Dataset):
             # get coordinate map
             segmentation = np.array(segmentation.convert('1'))
             coords_map = np.flip(np.column_stack(np.where(segmentation == 1)), axis=1)
-            # random position inside object mask to paste artificial defect
-            coords = get_random_coordinate(coords_map)
-            
+           
             # big defect (polygon)
-            t = random.randint(0,2)
             if y == 1:
+                # random position inside object mask to paste artificial defect
+                coords = get_random_coordinate(coords_map)
+                t = np.random.choice([0,1,2], p=[0.7, 0.15, 0.15])
                 if t == 0:
                     patch = generate_patch(
                         image_for_cutting,
-                        area_ratio=CPP.rectangle_area_ratio,
+                        area_ratio=self.patch_area_ratio,
                         aspect_ratio=CPP.rectangle_aspect_ratio,
                     )
+                    
                 if t == 1:
                     patch = generate_patch(
                         image_for_cutting,
-                        area_ratio=CPP.rectangle_area_ratio,
+                        area_ratio=self.patch_area_ratio,
                         aspect_ratio=CPP.rectangle_aspect_ratio,
                         colorized=True,
                         color_type='average'
@@ -266,17 +290,17 @@ class PretextTaskDataset(Dataset):
                 if t == 2:
                     patch = generate_patch(
                         image_for_cutting,
-                        area_ratio=CPP.rectangle_area_ratio,
+                        area_ratio=self.patch_area_ratio,
                         aspect_ratio=CPP.rectangle_aspect_ratio,
                         colorized=True,
                         color_type='random'
                     )
-                # check color similarity
+                #patch = CPP.jitter_transforms(patch)
                 if check_color_similarity(x, patch) > 0.99:
-                    low = np.random.uniform(0.3, 0.5)
-                    high = np.random.uniform(1.5, 1.7)
+                    low = np.random.uniform(0.75, 0.9)
+                    high = np.random.uniform(1.1, 1.15)
                     patch = ImageEnhance.Brightness(patch).enhance(random.choice([low, high]))
-                    patch = ImageEnhance.Contrast(patch).enhance(random.choice([low, high]))
+                    patch = ImageEnhance.Brightness(patch).enhance(random.choice([low, high]))
                 coords = check_valid_coordinates_by_container(
                         x.size, 
                         patch.size, 
@@ -285,20 +309,20 @@ class PretextTaskDataset(Dataset):
                     )
                 mask = None
                 mask = rect2poly(patch, regular=False, sides=8)
-                #mask = mask.filter(ImageFilter.GaussianBlur(1))
                 x = paste_patch(x, patch, coords, mask) 
             # small defect (scar)
-            else:
+            if y == 2:
+                t = np.random.choice([0,1,2], p=[0.7, 0.15, 0.15])
                 if t == 0:
                     scar = generate_patch(
                         image_for_cutting,
-                        area_ratio=CPP.scar_area_ratio,
+                        area_ratio=self.scar_area_ratio,
                         aspect_ratio=CPP.scar_aspect_ratio
                     )
                 if t == 1:
                     scar = generate_patch(
                         image_for_cutting,
-                        area_ratio=CPP.scar_area_ratio,
+                        area_ratio=self.scar_area_ratio,
                         aspect_ratio=CPP.scar_aspect_ratio,
                         colorized=True,
                         color_type='average'
@@ -306,29 +330,67 @@ class PretextTaskDataset(Dataset):
                 if t == 2:
                     scar = generate_patch(
                         image_for_cutting,
-                        area_ratio=CPP.scar_area_ratio,
+                        area_ratio=self.scar_area_ratio,
                         aspect_ratio=CPP.scar_aspect_ratio,
                         colorized=True,
                         color_type='random'
                     )
-                # check color similarity
+                #scar = CPP.jitter_transforms(scar)
                 if check_color_similarity(x, scar) > 0.99:
-                    low = np.random.uniform(0.3, 0.5)
-                    high = np.random.uniform(1.5, 1.7)
+                    low = np.random.uniform(0.75, 0.9)
+                    high = np.random.uniform(1.1, 1.15)
                     scar = ImageEnhance.Brightness(scar).enhance(random.choice([low, high]))
-                    scar = ImageEnhance.Contrast(scar).enhance(random.choice([low, high]))
-                angle = random.randint(-45,45)
+                    scar = ImageEnhance.Brightness(scar).enhance(random.choice([low, high]))
                 scar = scar.convert('RGBA')
-                scar = scar.rotate(angle, expand=True)
+                k = random.randint(2,5)
+                angle = random.randint(-45,45)
                 
-                coords = check_valid_coordinates_by_container(
-                    x.size, 
-                    scar.size, 
-                    current_coords=coords,
-                    container_scaling_factor=container_scaling_factor_scar
-                )
-                #scar = scar.filter(ImageFilter.GaussianBlur(1))
-                x = paste_patch(x, scar, coords, scar)
+                s = scar.rotate(angle, expand=True)
+                
+                offset = min(scar.size)
+                for _ in range(k):
+                    coords = get_random_coordinate(coords_map)
+                    coords = check_valid_coordinates_by_container(
+                        x.size, 
+                        s.size, 
+                        current_coords=coords,
+                        container_scaling_factor=container_scaling_factor_scar
+                    )
+                    x = paste_patch(x, s, coords, s)
+            # long line
+            if y == 3:
+                draw = ImageDraw.Draw(x)
+                side = random.choice(['left','top'])
+                n = 60 if not self.patch_localization else 30
+                points = []
+                c = 0
+                for i in range(n):
+                    offset = i/n
+                    index = random.randint(c, int(len(coords_map)*offset))
+                    p = coords_map[index]
+                    points.append(tuple(p))
+                    c = index
+                rgb = random.choice(['black','white','silver'])
+                
+                if side == 'left':
+                    points.sort(key=lambda tup: tup[0])
+                points = savgol_filter(points, 10, 2, axis=0)
+                if not self.patch_localization:
+                    p_splits = np.array_split(points, 10)
+                    k = random.randint(0,9)
+                    points = p_splits[k]
+                #else:
+                #    p_splits = np.array_split(points, 3)
+                #    k = random.randint(0,2)
+                #    points = p_splits[k]
+                points = [tuple(x) for x in points]
+                if self.patch_localization:
+                    draw.line(
+                    points, fill=rgb, width=1)
+                else:
+                    draw.line(
+                        points, fill=rgb, width=3)
+                
         # apply jittering
         x = CPP.jitter_transforms(x)
         if self.transform:
@@ -350,7 +412,7 @@ class PretextTaskDatamodule(pl.LightningDataModule):
             train_val_split:float=0.2,
             seed:int=0,
             min_dataset_length:int=1000,
-            duplication:bool=False,
+            duplication:bool=True,
             patch_localization:bool=False,
             patch_size:tuple=64):
         
@@ -444,7 +506,7 @@ class PretextTaskDatamodule(pl.LightningDataModule):
         return DataLoader(
             self.train_dataset, 
             batch_size=self.batch_size, 
-            shuffle=False,
+            shuffle=True,
             drop_last=True,
             persistent_workers=True,
             num_workers=8)
