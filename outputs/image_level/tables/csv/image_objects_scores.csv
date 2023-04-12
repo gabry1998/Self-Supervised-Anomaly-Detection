@@ -1,0 +1,12 @@
+,AUC (image),F1 (image)
+bottle,1.00,1.00
+cable,0.90,0.84
+capsule,0.87,0.93
+hazelnut,0.99,0.97
+metal_nut,0.91,0.92
+pill,0.82,0.92
+screw,0.83,0.86
+toothbrush,0.97,0.95
+transistor,0.92,0.83
+zipper,0.99,0.98
+average,0.92,0.92
