@@ -105,33 +105,33 @@ For the image-level approach the GradCam is used to obtain an anomaly map relati
     <td>tsne</td>
     <tr>
         <td>bottle</td>
-        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/bottle/image_level/image_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/bottle/patch_level/pixel_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/bottle/image_level/bottle_tsne.png"/> </td>
+        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/bottle/image_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/patch_level/computations/bottle/pixel_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/bottle/bottle_tsne.png"/> </td>
     </tr>
     <tr>
         <td>cable</td>
-        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/cable/image_level/image_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/cable/patch_level/pixel_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/cable/image_level/cable_tsne.png"/> </td>
+        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/cable/image_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/patch_level/computations/cable/pixel_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/cable/cable_tsne.png"/> </td>
     </tr>
     <tr>
         <td>capsule</td>
-        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/capsule/image_level/image_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/capsule/patch_level/pixel_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/capsule/image_level/capsule_tsne.png"/> </td>
+        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/capsule/image_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/patch_level/computations/capsule/pixel_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/capsule/capsule_tsne.png"/> </td>
     </tr>
     <tr>
         <td>hazelnut</td>
-        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/hazelnut/image_level/image_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/hazelnut/patch_level/pixel_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/hazelnut/image_level/hazelnut_tsne.png"/> </td>
+        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/hazelnut/image_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/patch_level/computations/hazelnut/pixel_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/hazelnut/hazelnut_tsne.png"/> </td>
     </tr>
     <tr>
         <td>metal_nut</td>
-        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/metal_nut/image_level/image_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/metal_nut/patch_level/pixel_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/metal_nut/image_level/metal_nut_tsne.png"/> </td>
+        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/metal_nut/image_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/patch_level/computations/metal_nut/pixel_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/metal_nut/metal_nut_tsne.png"/> </td>
     </tr>
 </table>
 
@@ -142,33 +142,33 @@ For the image-level approach the GradCam is used to obtain an anomaly map relati
     <td>tsne</td>
     <tr>
         <td>pill</td>
-        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/pill/image_level/image_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/pill/patch_level/pixel_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/pill/image_level/pill_tsne.png"/> </td>
+        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/pill/image_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/patch_level/computations/pill/pixel_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/pill/pill_tsne.png"/> </td>
     </tr>
     <tr>
         <td>screw</td>
-        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/screw/image_level/image_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/screw/patch_level/pixel_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/screw/image_level/screw_tsne.png"/> </td>
+        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/screw/image_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/patch_level/computations/screw/pixel_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/screw/screw_tsne.png"/> </td>
     </tr>
     <tr>
         <td>toothbrush</td>
-        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/toothbrush/image_level/image_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/toothbrush/patch_level/pixel_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/toothbrush/image_level/toothbrush_tsne.png"/> </td>
+        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/toothbrush/image_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/patch_level/computations/toothbrush/pixel_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/toothbrush/toothbrush_tsne.png"/> </td>
     </tr>
     <tr>
         <td>transistor</td>
-        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/transistor/image_level/image_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/transistor/patch_level/pixel_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/transistor/image_level/transistor_tsne.png"/> </td>
+        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/transistor/image_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/patch_level/computations/transistor/pixel_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/transistor/transistor_tsne.png"/> </td>
     </tr>
     <tr>
         <td>zipper</td>
-        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/zipper/image_level/image_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/zipper/patch_level/pixel_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/zipper/image_level/zipper_tsne.png"/> </td>
+        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/zipper/image_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/patch_level/computations/zipper/pixel_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/zipper/zipper_tsne.png"/> </td>
     </tr>
 </table>
 
@@ -180,32 +180,32 @@ For the image-level approach the GradCam is used to obtain an anomaly map relati
     <td>tsne</td>
     <tr>
         <td>carpet</td>
-        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/carpet/image_level/image_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/carpet/patch_level/pixel_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/carpet/image_level/carpet_tsne.png"/> </td>
+        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/carpet/image_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/patch_level/computations/carpet/pixel_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/carpet/carpet_tsne.png"/> </td>
     </tr>
     <tr>
         <td>grid</td>
-        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/grid/image_level/image_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/grid/patch_level/pixel_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/grid/image_level/grid_tsne.png"/> </td>
+        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/grid/image_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/patch_level/computations/grid/pixel_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/grid/grid_tsne.png"/> </td>
     </tr>
     <tr>
         <td>leather</td>
-        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/leather/image_level/image_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/leather/patch_level/pixel_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/leather/image_level/leather_tsne.png"/> </td>
+        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/leather/image_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/patch_level/computations/leather/pixel_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/leather/leather_tsne.png"/> </td>
     </tr>
     <tr>
         <td>tile</td>
-        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/tile/image_level/image_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/tile/patch_level/pixel_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/tile/image_level/tile_tsne.png"/> </td>
+        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/tile/image_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/patch_level/computations/tile/pixel_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/tile/tile_tsne.png"/> </td>
     </tr>
     <tr>
         <td>wood</td>
-        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/wood/image_level/image_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/wood/patch_level/pixel_roc.png"/> </td>
-        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/computations/wood/image_level/wood_tsne.png"/> </td>
+        <td><img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/wood/image_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/patch_level/computations/wood/pixel_roc.png"/> </td>
+        <td> <img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/outputs/image_level/computations/wood/wood_tsne.png"/> </td>
     </tr>
 </table>
