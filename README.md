@@ -78,11 +78,11 @@ Each block of the projection head is composed of a fully connected, a batch norm
 One model is trained for each element class of the MVTec dataset (15 models in total).
 The backbone is loaded with imagenet weights.
 Each model is trained on ```epochs=10``` with ```learning_rate=0.03```, only changing the projection head weights.
-Then a training is done unlocking the whole network with ```epochs=50``` and ```learning_rate=0.005```. The optimizer used is SGD with ```momentum=0.9```, with ```weight_decay=0.0005```, on which a Learning Rate Scheduler (Cosine Annealing Schedule) is subsequently applied.
-A ```batch_size=96``` is used and since the training data are few (about 200/300 images per mvtec element), they are duplicated to obtain a minimum of 1000 filenames.
+Then a training is done unlocking the whole network with ```epochs=50``` and ```learning_rate=0.01```. The optimizer used is SGD with ```momentum=0.9```, with ```weight_decay=0.0005```, on which a Learning Rate Scheduler (Cosine Annealing Schedule) is subsequently applied.
+A ```batch_size=96``` is used and since the training data are few (about 200/300 images per mvtec element), they are duplicated to obtain a minimum of 500 filenames.
 
 
-During the training phase a memory bank with size 500 is used. The purpose of the memory bank is to memorize the embedding vectors representing the normal data. During the training step, for each batch the embedding vectors with label ```y=0``` and predicted with ```y_hat=0``` are filtered and inserted into the memory bank. At the end of each epoch the excess data in the memory bank are eliminated, discarding the oldest ones.
+During the training phase a memory bank is used. The purpose of the memory bank is to memorize the embedding vectors representing the normal data. During the training step, for each batch the embedding vectors with label ```y=0``` and predicted with ```y_hat=0``` are filtered and inserted into the memory bank. At the end of each epoch the excess data in the memory bank are eliminated, discarding the oldest ones.
 
 
 To perform a patch-level and not image-level approach, before applying geometric transformations to the images, they are randomly cropped with a ```patch_size=32```.
@@ -91,6 +91,8 @@ To perform a patch-level and not image-level approach, before applying geometric
 In the inference phase, the embedding vector of an image is extracted and subsequently given as input to an Anomaly Detector. The anomaly score is calculated by evaluating the average distance between the edging vector and 3 vectors considered "normal", taken from the memory bank with the Nearest Neighbor approach. The metric for distance is Cosine Similarity.
 
 For the patch-level approach, the test image is decomposed into small patches with ```patch_size=32``` and with ```stride=8```.
+
+<img src="https://raw.githubusercontent.com/gabry1998/Self-Supervised-Anomaly-Detection/master/readme_images/modes.png"/>
 
 ## Localization
 For the image-level approach the GradCam is used to obtain an anomaly map relating to a test image. For the patch-level approach, an embedding vector is extracted for each patch and its anomaly score calculated, as presented previously. Subsequently an upsampling with bilinear interpolation is done to obtain an anomaly map of dimensions equal to the test image.
