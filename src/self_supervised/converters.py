@@ -8,8 +8,8 @@ def gt2label(gt_list:Tensor, negative:int=0, positive:int=1) -> list:
     return [negative if torch.sum(x) == 0 else positive for x in gt_list]
 
 
-def multiclass2binary(predictions:Tensor) -> Tensor:
-    return torch.tensor([1 if x > 0 else 0 for x in predictions])
+def multiclass2binary(labels:Tensor) -> Tensor:
+    return torch.tensor([1 if x > 0 else 0 for x in labels])
 
 
 def list2np(images, labels) -> tuple:

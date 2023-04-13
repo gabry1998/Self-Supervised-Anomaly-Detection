@@ -1,18 +1,16 @@
-import random
-from sklearn.neighbors import KernelDensity, NearestNeighbors
+from sklearn.neighbors import  NearestNeighbors
 from torch import nn
 from torchsummary import summary as torch_summary
 from torchvision.models import ResNet
 from torchvision import models
 from torchmetrics.functional import accuracy
 from torch import Tensor
-from self_supervised.converters import gt2label
-from self_supervised.functional import get_prediction_class
+from self_supervised.constants import ModelOutputsContainer
+from self_supervised.converters import gt2label, multiclass2binary
+from self_supervised.functional import extract_patches, get_prediction_class
 from sklearn.model_selection import train_test_split as tts
 from typing import Tuple
-from scipy.stats import norm
 from collections import deque
-from numpy import linalg
 import numpy as np
 import torch
 import pytorch_lightning as pl
@@ -29,7 +27,7 @@ class PeraNet(pl.LightningModule):
             latent_space_layers:int=5,
             latent_space_layers_base_dim:int=512,
             num_classes:int=4,
-            memory_bank_dim:int=100,
+            memory_bank_dim:int=1000,
             stage='projection_train') -> None:
         super(PeraNet, self).__init__()
         self.save_hyperparameters()
@@ -42,6 +40,7 @@ class PeraNet(pl.LightningModule):
             num_classes=num_classes)
 
         self.mvtec = False
+        self.patch_level = False
         self.num_classes = num_classes
         
         self.lr = learning_rate
@@ -51,6 +50,9 @@ class PeraNet(pl.LightningModule):
         
         self.memory_bank_dim = memory_bank_dim
         self.memory_bank = torch.tensor([], device='cpu')
+        
+        self.batch = None
+        self.num_patches = None
         
      
     def __setup_backbone(self) -> ResNet:
@@ -149,6 +151,14 @@ class PeraNet(pl.LightningModule):
             torch_summary(self.to('cpu'), size, device='cpu')
      
     
+    def enable_patch_level_mode(self):
+        self.patch_level = True
+        
+    
+    def disable_patch_level_mode(self):
+        self.patch_level = False
+    
+    
     def enable_mvtec_inference(self) -> None:
         self.mvtec = True
     
@@ -184,31 +194,6 @@ class PeraNet(pl.LightningModule):
             for param in self.latent_space.parameters():
                 param.requires_grad = False
             self.latent_space.eval()
-
-
-    def layer_activations(self, x, layers:list=['layer4']) -> list:
-        x = self.feature_extractor.conv1(x)
-        x = self.feature_extractor.bn1(x)
-        x = self.feature_extractor.relu(x)
-        x = self.feature_extractor.maxpool(x)
-
-        l1 = self.feature_extractor.layer1(x)
-        l2 = self.feature_extractor.layer2(l1)
-        l3 = self.feature_extractor.layer3(l2)
-        l4 = self.feature_extractor.layer4(l3)
-        
-        activations = []
-        
-        if 'layer1' in layers:
-            activations.append(l1)
-        if 'layer2' in layers:
-            activations.append(l2)
-        if 'layer3' in layers:
-            activations.append(l3)
-        if 'layer4' in layers:
-            activations.append(l4)
-        
-        return activations
     
     
     def on_save_checkpoint(self, checkpoint) -> None:
@@ -220,22 +205,15 @@ class PeraNet(pl.LightningModule):
             self.memory_bank = checkpoint['memory_bank']
         else:
             self.memory_bank = torch.tensor([])
-    
-    
-    def fill_memory_bank(self, embeds:Tensor, y:Tensor, y_hat:Tensor):
-        mask = (y==0) & (y_hat==0)
-        embeds = embeds[mask].detach().to('cpu', non_blocking=True)
-        self.memory_bank = torch.cat([self.memory_bank, embeds])
-        
-        x = deque(self.memory_bank, self.memory_bank_dim)
-        self.memory_bank = torch.from_numpy(np.array([np.array(k) for k in x]))
-    
-    def on_train_epoch_end(self) -> None:
-        x = deque(self.memory_bank, self.memory_bank_dim)
-        self.memory_bank = torch.from_numpy(np.array([np.array(k) for k in x]))
-        
-        
+
+  
     def forward(self, x:Tensor) -> dict:
+        if self.patch_level:
+            x = extract_patches(x, dim=32, stride=8)
+            b,p,c,h,w = x.shape
+            x = x.reshape((b*p, c ,h,w))
+            self.batch = b
+            self.num_patches = p
         b, c, h, w = x.shape
         if h < 64 or w < 64:
             x = F.interpolate(x, 64, mode='nearest')
@@ -298,6 +276,20 @@ class PeraNet(pl.LightningModule):
         
         return loss
 
+
+    def on_train_epoch_end(self) -> None:
+        x = deque(self.memory_bank, self.memory_bank_dim)
+        self.memory_bank = torch.from_numpy(np.array([np.array(k) for k in x]))
+
+    
+    def fill_memory_bank(self, embeds:Tensor, y:Tensor, y_hat:Tensor):
+        mask = (y==0) & (y_hat==0)
+        embeds = embeds[mask].detach().to('cpu', non_blocking=True)
+        self.memory_bank = torch.cat([self.memory_bank, embeds])
+        
+        x = deque(self.memory_bank, self.memory_bank_dim)
+        self.memory_bank = torch.from_numpy(np.array([np.array(k) for k in x]))
+    
     
     def validation_step(self, batch:Tuple[Tensor], batch_idx) -> dict:
         x, y, _, = batch   
@@ -314,67 +306,29 @@ class PeraNet(pl.LightningModule):
                       prog_bar=True)
         
         return metrics
-
-
-    def test_step(self, batch:Tuple[Tensor], batch_idx) -> dict:
-        x, y, _ = batch
-        if self.mvtec:
-            y = torch.tensor(gt2label(y))
-            if torch.cuda.is_available():
-                y = y.to('cuda')
-            else:
-                y = y.to('cpu')
-        
-        outputs = self(x)
-        y_hat = outputs['classifier']
-        
-        loss = F.cross_entropy(y_hat, y)
-        acc = accuracy(y_hat, y)
-        
-        metrics = {"test_accuracy": acc, "test_loss": loss}
-        self.log_dict(metrics,
-                      on_step=False,
-                      on_epoch=True,
-                      prog_bar=True)
-        
-        return metrics
     
     
-    def predict_step(self, batch:Tuple[Tensor], batch_idx, dataloader_idx=0) -> dict:
-        outputs = {
-            'x':None,
-            'x_prime':None,
-            'y_true':None,
-            'y_tsne':None,
-            'y_hat':None,
-            'groundtruth':None,
-            'embedding':None
-        }
+    def predict_step(self, batch:Tuple[Tensor], batch_idx, dataloader_idx=0) -> ModelOutputsContainer:
+        outputs = ModelOutputsContainer()
         x_prime, groundtruths, x = batch
         if self.mvtec:
-            y = torch.tensor(gt2label(groundtruths))
-            y_tsne = torch.tensor(gt2label(groundtruths, negative=-1, positive=self.num_classes))
-            if torch.cuda.is_available():
-                y = y.to('cuda')
-                y_tsne = y_tsne.to('cuda')
-            else:
-                y_tsne = y_tsne.to('cpu')
-                y_tsne = y_tsne.to('cpu')
-            outputs['y_true'] = y
-            outputs['y_tsne'] = y_tsne 
-            outputs['groundtruth'] = groundtruths
+            outputs.y_true_binary_labels = torch.tensor(gt2label(groundtruths))
+            outputs.y_true_multiclass_labels = torch.tensor(gt2label(groundtruths, negative=-1, positive=self.num_classes)) 
+            outputs.ground_truths = groundtruths
         else:
-            outputs['y_true'] = groundtruths
-            outputs['y_tsne'] = groundtruths 
-            outputs['groundtruth'] = None  
+            outputs.y_true_binary_labels = multiclass2binary(groundtruths)
+            outputs.y_true_multiclass_labels = groundtruths
+             
             
         predictions = self(x_prime)
-        y_hat = get_prediction_class(predictions['classifier'])
+        raw_predictions = predictions['classifier']
+        y_hat = get_prediction_class(raw_predictions)
         
-        outputs['x'] = x
-        outputs['x_prime'] = x_prime
-        outputs['embedding'] = predictions['latent_space']
-        outputs['y_hat'] = y_hat
+        outputs.original_data = x
+        outputs.tensor_data = x_prime
+        outputs.raw_predictions = raw_predictions
+        outputs.embedding_vectors = predictions['latent_space']
+        outputs.y_hat = y_hat
         
         return outputs
     
@@ -387,9 +341,12 @@ class PeraNet(pl.LightningModule):
         return [optimizer], []
 
 
+
 class AnomalyDetector:
-    def __init__(self) -> None:
-        pass
+    def __init__(self, patch_level:bool=False, batch:int=None, num_patches:int=None) -> None:
+        self.patch_level = patch_level
+        self.batch = batch
+        self.dim = int(np.sqrt(num_patches)) if num_patches else None
     
     
     def fit(self, embeddings:Tensor) -> None:
@@ -401,13 +358,13 @@ class AnomalyDetector:
         anomaly_scores = torch.tensor(anomaly_scores)
         if self.k > 1:
             anomaly_scores = torch.mean(anomaly_scores, dim=1)
-        #anomaly_scores, _ = torch.sort(anomaly_scores, descending=True)
         self.threshold = torch.max(anomaly_scores).item()
-        print(self.threshold)
 
     def predict(self, x:Tensor) -> Tensor:
         anomaly_scores = self.nbrs.kneighbors(x)[0].squeeze()
         anomaly_scores = torch.tensor(anomaly_scores)
         if self.k > 1:
             anomaly_scores = torch.mean(anomaly_scores, dim=1)
+        if self.patch_level:
+            anomaly_scores = torch.reshape(anomaly_scores, (self.batch,1,self.dim,self.dim))
         return anomaly_scores

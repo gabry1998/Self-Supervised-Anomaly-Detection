@@ -75,10 +75,10 @@ def extract_mask_patches(image:Tensor, dim:int=32, stride:int=4) -> Tensor:
 
 
 def extract_patches(image:Tensor, dim:int=32, stride:int=4) -> Tensor:
+    b,c,h,w = image.shape
     patches = image.unfold(2, dim, stride).unfold(3, dim, stride)
-    patches = patches.reshape(1, 3, -1, dim, dim)
-    patches = patches.squeeze()
-    patches = torch.permute(patches, (1,0,2,3))
+    patches = patches.reshape(b, c, -1, dim, dim)
+    patches = torch.permute(patches, (0,2,1,3,4))
     return patches
 
 
@@ -92,3 +92,4 @@ def normalize_in_interval(sample_mat:ndarray, interval_min:int, interval_max:int
     x =(sample_mat - np.min(sample_mat)) / (np.max(sample_mat) - np.min(sample_mat)) * (interval_max - interval_min) + interval_min
     x = np.rint(x)
     return x
+    

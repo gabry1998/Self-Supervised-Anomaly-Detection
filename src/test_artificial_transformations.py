@@ -499,6 +499,6 @@ def good_and_bad():
 if __name__ == "__main__":
     #fixed_good_bad()
     #good_and_bad()
-    test_augmentations(True)
-    check_all_subject(True)
+    test_augmentations(True) # true -> patch level, false -> image-level
+    check_all_subject(True) # true -> patch level, false -> image-level
     #check_distribution()

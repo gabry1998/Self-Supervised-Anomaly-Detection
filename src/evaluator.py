@@ -658,21 +658,21 @@ def mvtec_eval():
     textures = get_textures_names()
     obj1 = obj_set_one()
     obj2 = obj_set_two()
-    experiments_list = experiments
+    experiments_list = ['bottle']
     patch_localization = False
     mode = 'patch_level' if patch_localization else 'image_level'
     
     evaluate(
         dataset_dir='dataset/',
-        root_inputs_dir='brutta_copia/outputs/'+mode+'/computations/',
-        root_outputs_dir='brutta_copia/b/'+mode+'/computations/',
+        root_inputs_dir='outputs/'+mode+'/computations/',
+        root_outputs_dir='brutta_copia/temp/'+mode+'/computations/',
         imsize=(256,256),
         patch_dim = 32,
         stride=8,
-        seed=123456789,
+        seed=0,
         patch_localization=patch_localization,
         experiments_list=experiments_list,
-        tables_output='brutta_copia/b/'+mode+'/tables/'
+        tables_output='brutta_copia/temp/'+mode+'/tables/'
     )
 
 def artificial_only():
@@ -695,5 +695,5 @@ def artificial_only():
      
     
 if __name__ == "__main__":
-    artificial_only()
-    #mvtec_eval()
+    #artificial_only()
+    mvtec_eval()

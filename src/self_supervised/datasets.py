@@ -54,30 +54,30 @@ class MVTecDataset(Dataset):
             images_filenames:list,
             imsize:tuple=(256,256),
             transform:Compose=None,
-            subject=None) -> None:
+            patch_level:bool=False) -> None:
         
         super().__init__()
         self.dataset_dir = dataset_dir
         self.images_filenames = images_filenames
         self.imsize = imsize
         self.transform = transform
-        self.subject = subject
+        self.patch_level = patch_level
             
     
     def __getitem__(self, index):
         filename = self.images_filenames[index]
-        x = Image.open(filename).resize(self.imsize).convert('RGB')
+        original = Image.open(filename).resize(self.imsize).convert('RGB')
         
         gt_filename = get_ground_truth_filename(
             filename,
             self.dataset_dir+'ground_truth/')
         gt = get_ground_truth(gt_filename, self.imsize)
-        x_hat = x.copy()
+        x = original.copy()
         if self.transform:
-            x_hat = self.transform(x)
+            x = self.transform(original)
         gt = transforms.ToTensor()(gt)
         
-        return x_hat, gt, transforms.ToTensor()(x)
+        return x, gt, transforms.ToTensor()(original)
         
         
     def __len__(self):
@@ -91,14 +91,14 @@ class MVTecDatamodule(pl.LightningDataModule):
             imsize:tuple=(256,256),
             batch_size:int=32,  
             seed:int=0,
-            subject=None):
+            patch_level=None):
             
         super().__init__()
         self.root_dir = root_dir
         self.imsize = imsize
         self.batch_size = batch_size
         self.seed = seed
-        self.subject = subject
+        self.patch_level = patch_level
         self.transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
@@ -119,23 +119,19 @@ class MVTecDatamodule(pl.LightningDataModule):
             train_images_filenames,
             imsize=self.imsize,
             transform=self.transform,
-            subject=self.subject
         )
         self.val_dataset = MVTecDataset(
             self.root_dir,
             val_images_filenames,
             imsize=self.imsize,
             transform=self.transform,
-            subject=self.subject
         )
         self.test_dataset = MVTecDataset(
             self.root_dir,
             self.test_images_filenames,
             imsize=self.imsize,
             transform=self.transform,
-            subject=self.subject
         )
-     
      
     def train_dataloader(self):
         return DataLoader(
@@ -492,7 +488,7 @@ class PretextTaskDatamodule(pl.LightningDataModule):
                 patch_localization=self.patch_localization,
                 patch_size=self.patch_size)
             
-        if stage == 'test' or stage is None:
+        if stage == 'test' or stage == 'predict' or stage is None:
             self.test_dataset = PretextTaskDataset(
                 self.subject,
                 self.test_images_filenames,
