@@ -6,7 +6,8 @@ from self_supervised.models import PeraNet, AnomalyDetector
 from self_supervised.custom_callbacks import MetricTracker
 from torch import Tensor
 from torch.nn.functional import softmax
-from self_supervised.constants import ModelOutputsContainer, EvaluationOutputContainer, METRICS, LOCALIZATION_OUTPUTS
+from self_supervised.constants import METRICS, LOCALIZATION_OUTPUTS
+from self_supervised.data_containers import ModelOutputsContainer, EvaluationOutputContainer
 from self_supervised.converters import imagetensor2array, multiclass2binary
 from self_supervised.functional import get_prediction_class
 from self_supervised import visualization as vis
@@ -30,31 +31,31 @@ import pytorch_lightning as pl
 class Evaluator:
     def __init__(
             self, 
+            subject:str,
             evaluation_metrics:list=[]) -> None:
         
+        self.subject = subject
         self.evaluation_metrics = np.array(evaluation_metrics)
-        self.scores = EvaluationOutputContainer() 
+        self.scores = EvaluationOutputContainer(subject) 
     
     
     def plot_tsne(
             self,
             outputs_artificial:ModelOutputsContainer,
             outputs_real:ModelOutputsContainer, 
-            subject:str, 
             outputs_dir:str):
         print('>>> tsne plot')
         vis.plot_tsne(
             torch.cat([outputs_artificial.embedding_vectors, outputs_real.embedding_vectors]),
             torch.cat([outputs_artificial.y_true_multiclass_labels, outputs_real.y_true_multiclass_labels]),
             saving_path=outputs_dir,
-            title=subject.upper()+' feature visualization',
-            name=subject+'_tsne.png')
+            title=self.subject.upper()+' feature visualization',
+            name=self.subject+'_tsne.png')
     
     
     def evaluate(
             self,
             output_container:ModelOutputsContainer, 
-            subject:str, 
             outputs_dir:str,
             patch_level:bool=False): 
         print('>>> start evaluation')    
@@ -95,13 +96,14 @@ class Evaluator:
                 fpr, tpr, 
                 auc_score, 
                 saving_path=outputs_dir,
-                title='Roc curve for '+subject.upper(),
-                name=subject+'_pixel_roc.png' if patch_level else subject+'_image_roc.png')
+                title='Roc curve for '+self.subject.upper(),
+                name=self.subject+'_pixel_roc.png' if patch_level else self.subject+'_image_roc.png')
+            self.scores.auroc_fpr_tpr = (fpr, tpr)
             self.scores.auroc = auc_score
         
         # computing image f1-score
         if 'f1-score' in self.evaluation_metrics:
-            if not patch_level:
+            if patch_level:
                 print('\'f1-score\' not a valid metric for \'patch-level\' mode')
                 exit(0)
             print(' f1-score')
@@ -123,9 +125,10 @@ class Evaluator:
                 all_pros,
                 aupro,
                 saving_path=outputs_dir,
-                title='Pro curve for '+subject.upper(),
-                name=subject+'_pro.png'
+                title='Pro curve for '+self.subject.upper(),
+                name=self.subject+'_pro.png'
             )
+            self.scores.aupro_fpr_tpr = (all_fprs, all_pros)
             self.scores.aupro = aupro
         
         if 'iou' in self.evaluation_metrics:
@@ -412,7 +415,9 @@ def inference(
         subject:str,
         mvtec_inference:bool=True,
         patch_localization:bool=False,
-        max_images_to_inference:int=-1
+        patchsize:int=32,
+        stride:int=8,
+        max_images_to_inference:int=None
         ) -> ModelOutputsContainer:
     print('>>> initializing inference')
     if os.path.exists('lightning_logs/'):
@@ -422,7 +427,7 @@ def inference(
     model:PeraNet = PeraNet.load_from_checkpoint(model_input_dir)
     model.eval()
     if patch_localization:
-        model.enable_patch_level_mode()
+        model.enable_patch_level_mode(patchsize, stride)
     
     tester = pl.Trainer(accelerator='auto', devices=1, limit_predict_batches=max_images_to_inference)
     
@@ -473,12 +478,14 @@ def inference(
             normality_datamodule = PretextTaskDatamodule(
                 subject=subject,
                 root_dir=dataset_dir,
+                min_dataset_length=500,
                 batch_size=1,
             )
         normality_datamodule.setup()
-        normality_retriever = pl.Trainer(accelerator='auto', devices=1, limit_predict_batches=2 if patch_localization else -1)
-        output_normality:ModelOutputsContainer = normality_retriever.predict(model, dataloaders=normality_datamodule.train_dataloader())[0]
-        output_normality.to_cpu()
+        normality_retriever = pl.Trainer(accelerator='auto', devices=1, limit_predict_batches=2 if patch_localization else None)
+        normality_list:list[ModelOutputsContainer] = normality_retriever.predict(model, dataloaders=normality_datamodule.train_dataloader())
+        output_normality = ModelOutputsContainer()
+        output_normality.from_list(normality_list)
         normality = output_normality.embedding_vectors
         
     output.to_cpu()

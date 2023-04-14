@@ -4,9 +4,10 @@ import self_supervised.tools as tools
 import os
 os.system('clear')
 
+
+
 experiments = get_all_subject_experiments('dataset/')
 pbar = tqdm(range(len(experiments)))
-
 for i in pbar:
     subject = experiments[i]
     pbar.set_description('Running training on subject '+subject.upper())

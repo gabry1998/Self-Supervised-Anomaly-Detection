@@ -5,7 +5,7 @@ from torchvision.models import ResNet
 from torchvision import models
 from torchmetrics.functional import accuracy
 from torch import Tensor
-from self_supervised.constants import ModelOutputsContainer
+from self_supervised.data_containers import ModelOutputsContainer
 from self_supervised.converters import gt2label, multiclass2binary
 from self_supervised.functional import extract_patches, get_prediction_class
 from sklearn.model_selection import train_test_split as tts
@@ -151,7 +151,9 @@ class PeraNet(pl.LightningModule):
             torch_summary(self.to('cpu'), size, device='cpu')
      
     
-    def enable_patch_level_mode(self):
+    def enable_patch_level_mode(self, patchsize:int=32, stride:int=8):
+        self.patchsize = patchsize
+        self.stride = stride
         self.patch_level = True
         
     
@@ -209,7 +211,7 @@ class PeraNet(pl.LightningModule):
   
     def forward(self, x:Tensor) -> dict:
         if self.patch_level:
-            x = extract_patches(x, dim=32, stride=8)
+            x = extract_patches(x, dim=self.patchsize, stride=self.stride)
             b,p,c,h,w = x.shape
             x = x.reshape((b*p, c ,h,w))
             self.batch = b
@@ -350,7 +352,7 @@ class AnomalyDetector:
     
     
     def fit(self, embeddings:Tensor) -> None:
-        train,val = tts(embeddings, test_size=0.3)
+        train, val = tts(embeddings, test_size=0.3)
         self.k = 3
         self.nbrs:NearestNeighbors = NearestNeighbors(
             n_neighbors=self.k, algorithm='auto', metric='cosine').fit(train)
