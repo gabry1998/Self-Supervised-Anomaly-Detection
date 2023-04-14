@@ -1,10 +1,12 @@
+from __future__ import annotations
 from torchmetrics import JaccardIndex, PrecisionRecallCurve
+from tqdm import tqdm
 from self_supervised.datasets import PretextTaskDatamodule, MVTecDatamodule
 from self_supervised.models import PeraNet, AnomalyDetector
 from self_supervised.custom_callbacks import MetricTracker
 from torch import Tensor
 from torch.nn.functional import softmax
-from self_supervised.constants import ModelOutputsContainer, EvaluationOutputContainer, METRICS
+from self_supervised.constants import ModelOutputsContainer, EvaluationOutputContainer, METRICS, LOCALIZATION_OUTPUTS
 from self_supervised.converters import imagetensor2array, multiclass2binary
 from self_supervised.functional import get_prediction_class
 from self_supervised import visualization as vis
@@ -144,7 +146,105 @@ class Evaluator:
         f1_score = (2 * precision * recall) / (precision + recall + 1e-10)
         value = t[np.argmax(f1_score)]
         return value
-    
+
+
+# class for localizing defects
+class Localizer:
+    def __init__(
+            self,
+            outputs_container:ModelOutputsContainer,
+            outputs_dir:str,
+            outputs_list:list[str] = ['original', 'localization']) -> None:
+        self.outputs_container = outputs_container
+        self.outputs_dir = outputs_dir
+        self.outputs_list = np.array(outputs_list)
+        
+    def localize(
+            self,
+            threshold:int):
+        
+        # check valid outputs
+        if self.outputs_list.size == 0:
+            print('No outputs selected')
+            
+        check_outputs = np.isin(self.outputs_list, LOCALIZATION_OUTPUTS(), assume_unique=True)
+        if not np.all(check_outputs):
+            wrong_outs = np.where(check_outputs==False)[0]
+            print('Wrong output(s): ', end='')
+            print([self.outputs_list[i] for i in wrong_outs])
+            print('Correct outputs list: ', end='')
+            print(LOCALIZATION_OUTPUTS())
+            exit(0)
+        
+        num_images = self.outputs_container.anomaly_maps.shape[0]
+        pbar = tqdm(range(num_images), leave=True)
+        for i in pbar:
+            out_suffix = '/'+str(i)+'_img/'
+            # tensors
+            original_tensor_image = self.outputs_container.original_data[i]
+            ground_truth = self.outputs_container.ground_truths[i]
+            anomaly_map = self.outputs_container.anomaly_maps[i]
+            anomaly_map_upsampled = upsample(anomaly_map[None, :])
+            predicted_mask = anomaly_map_upsampled > threshold
+            # numpy arrays for plot
+            original_image_ndarray = imagetensor2array(original_tensor_image)
+            anomaly_map_ndarray = imagetensor2array(anomaly_map, integer=False)
+            anomaly_map_upsampled_ndarray = imagetensor2array(anomaly_map_upsampled[0], integer=False)
+            ground_truth_ndarray = imagetensor2array(ground_truth)
+            localization_ndarray = vis.apply_heatmap(original_tensor_image[None, :], anomaly_map_upsampled)
+            predicted_mask_ndarray = imagetensor2array(predicted_mask[0]).squeeze()
+            segmentation_ndarray = vis.apply_segmentation(original_image_ndarray, predicted_mask_ndarray)
+            #print('>>> plotting images')
+            if 'original' in self.outputs_list:
+                pbar.set_description('plotting original image        (image %i)' % i)
+                pbar.refresh()
+                #print(' original')
+                vis.plot_single_image(
+                    img=original_image_ndarray, 
+                    saving_path=self.outputs_dir+out_suffix,
+                    name=str(i)+'_original.png')
+            if 'ground_truth' in self.outputs_list:
+                pbar.set_description('plotting ground_truth          (image %i)' % i)
+                pbar.refresh()
+                #print(' ground_truth')
+                vis.plot_single_image(
+                    img=ground_truth_ndarray, 
+                    saving_path=self.outputs_dir+out_suffix,
+                    name=str(i)+'_ground_truth.png')
+            if 'anomaly_map' in self.outputs_list:
+                pbar.set_description('plotting anomaly_map           (image %i)' % i)
+                pbar.refresh()
+                #print(' anomaly_map')
+                vis.plot_single_image(
+                    img=anomaly_map_ndarray, 
+                    saving_path=self.outputs_dir+out_suffix,
+                    name=str(i)+'_anomaly_map.png')
+            if 'anomaly_map_upsampled' in self.outputs_list:
+                pbar.set_description('plotting anomaly_map_upsampled (image %i)' % i)
+                pbar.refresh()
+                #print(' anomaly_map_upsampled')
+                vis.plot_single_image(
+                    img=anomaly_map_upsampled_ndarray, 
+                    saving_path=self.outputs_dir+out_suffix,
+                    name=str(i)+'_anomaly_map_upsampled.png')
+            if 'localization' in self.outputs_list:
+                pbar.set_description('plotting localization          (image %i)' % i)
+                pbar.refresh()
+                #print(' localization')
+                vis.plot_single_image(
+                    img=localization_ndarray, 
+                    saving_path=self.outputs_dir+out_suffix,
+                    name=str(i)+'_localization.png')
+            if 'segmentation' in self.outputs_list:
+                pbar.set_description('plotting segmentation          (image %i)' % i)
+                pbar.refresh()
+                #print(' segmentation')
+                vis.plot_single_image(
+                    img=segmentation_ndarray, 
+                    saving_path=self.outputs_dir+out_suffix,
+                    name=str(i)+'_segmentation.png')
+        
+
 # class for checking classification errors based on probabilities
 # eg. check why good image predicted as a defect
 class ErrorAnalyzer:
@@ -198,7 +298,6 @@ class ErrorAnalyzer:
             axs[i].axis('off')
         
         plt.savefig(output_path, bbox_inches='tight')
-        
 
 # function for training over a single category
 def training(
@@ -313,6 +412,7 @@ def inference(
         subject:str,
         mvtec_inference:bool=True,
         patch_localization:bool=False,
+        max_images_to_inference:int=-1
         ) -> ModelOutputsContainer:
     print('>>> initializing inference')
     if os.path.exists('lightning_logs/'):
@@ -324,7 +424,7 @@ def inference(
     if patch_localization:
         model.enable_patch_level_mode()
     
-    tester = pl.Trainer(accelerator='auto', devices=1)
+    tester = pl.Trainer(accelerator='auto', devices=1, limit_predict_batches=max_images_to_inference)
     
     print('>>> preparing datamodule')
     datamodule = None
@@ -376,7 +476,8 @@ def inference(
                 batch_size=1,
             )
         normality_datamodule.setup()
-        output_normality:ModelOutputsContainer = tester.predict(model, dataloaders=normality_datamodule.train_dataloader())[0]
+        normality_retriever = pl.Trainer(accelerator='auto', devices=1, limit_predict_batches=2 if patch_localization else -1)
+        output_normality:ModelOutputsContainer = normality_retriever.predict(model, dataloaders=normality_datamodule.train_dataloader())[0]
         output_normality.to_cpu()
         normality = output_normality.embedding_vectors
         
@@ -386,14 +487,15 @@ def inference(
     print(' computing anomaly scores')
     anomaly_scores = detector.predict(output.embedding_vectors)
     
+    output.threshold = detector.threshold
     output.anomaly_maps = anomaly_scores
     return output
 
 
 # function for upsampling anomaly maps
-def upsample(anomaly_maps:Tensor, target_size:int=256):
-    print('>>> upsampling')
+def upsample(anomaly_maps:Tensor, target_size:int=256) -> Tensor:
+    #print('>>> upsampling')
     ksize = 7
     anomaly_maps = F.relu(functional.gaussian_blur(anomaly_maps, kernel_size=ksize))
     anomaly_maps = F.interpolate(anomaly_maps, target_size, mode='bilinear')
-    return anomaly_maps
+    return anomaly_maps # return tensor shape is Bx1xHxW

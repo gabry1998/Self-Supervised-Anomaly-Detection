@@ -158,8 +158,6 @@ def check_color_similarity(patch:Image.Image, defect:Image.Image) -> float:
     out = cosine_similarity(v1, v2)
     return out.squeeze()
 
-
-
    
 def generate_patch(
         image:Image.Image, 

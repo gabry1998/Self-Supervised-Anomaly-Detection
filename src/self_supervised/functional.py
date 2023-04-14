@@ -1,4 +1,3 @@
-from email.mime.text import MIMEText
 from numpy import ndarray
 from PIL import Image
 from torch import Tensor
@@ -7,7 +6,6 @@ import numpy as np
 import glob
 import torch
 import os
-import smtplib
 
 
 
@@ -25,7 +23,7 @@ def get_ground_truth(filename:str=None, imsize=(256,256)):
 
 
 def get_prediction_class(predictions:Tensor) -> Tensor:
-    y_hat = torch.max(predictions.data, 1)
+    y_hat:Tensor = torch.max(predictions.data, 1)
     return y_hat.indices
 
 
@@ -68,12 +66,6 @@ def duplicate_filenames(filenames:ndarray, baseline:int=2000) -> ndarray:
     return dummy_copy
 
 
-def extract_mask_patches(image:Tensor, dim:int=32, stride:int=4) -> Tensor:
-    patches = image.unfold(2, dim, stride).unfold(3, dim, stride)
-    patches = patches.reshape(-1,1, dim, dim)
-    return patches
-
-
 def extract_patches(image:Tensor, dim:int=32, stride:int=4) -> Tensor:
     b,c,h,w = image.shape
     patches = image.unfold(2, dim, stride).unfold(3, dim, stride)
@@ -87,9 +79,3 @@ def normalize(tensor:Tensor) -> Tensor:
     tensor /= tensor.max()
     return tensor
 
-
-def normalize_in_interval(sample_mat:ndarray, interval_min:int, interval_max:int) -> ndarray:
-    x =(sample_mat - np.min(sample_mat)) / (np.max(sample_mat) - np.min(sample_mat)) * (interval_max - interval_min) + interval_min
-    x = np.rint(x)
-    return x
-    

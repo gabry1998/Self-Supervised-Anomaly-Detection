@@ -15,6 +15,8 @@ class ModelOutputsContainer:
         self.ground_truths:Tensor = None # ground thruths maps tensors
         self.anomaly_maps:Tensor = None # anomaly scores (image-level) vector or anomaly maps (patch-level) vector
         self.embedding_vectors:Tensor = None # 2D tensor PeraNet outputs
+        
+        self.threshold = None
     
     def to_cpu(self):
         self.original_data = self.original_data.to('cpu') if torch.is_tensor(self.original_data) > 0 else None
@@ -51,6 +53,8 @@ class ModelOutputsContainer:
         self.ground_truths = torch.cat(g) if len(g) else None
         self.anomaly_maps = torch.cat(h) if len(h) else None
         self.embedding_vectors = torch.cat(i) if len(i) else None
+        
+        self.threshold = None
 
 
 class EvaluationOutputContainer:
@@ -74,7 +78,9 @@ class EvaluationOutputContainer:
             round(self.iou, 2) if self.iou else None
         )
         
-    
+
+def LOCALIZATION_OUTPUTS() -> list:
+    return ['original', 'ground_truth', 'anomaly_map', 'anomaly_map_upsampled', 'localization', 'segmentation']
 
 
 def METRICS() -> list:
@@ -83,6 +89,7 @@ def METRICS() -> list:
 
 def TEXTURES() -> list:
     return ['carpet','grid','leather','tile','wood']
+
 
 def OBJECTS() -> list:
     return [
@@ -99,6 +106,7 @@ def OBJECTS() -> list:
         'zipper'
     ]
 
+
 def OBJECTS_SET_ONE()->  list:
     return [
         'bottle',
@@ -106,6 +114,7 @@ def OBJECTS_SET_ONE()->  list:
         'capsule',
         'hazelnut',
         'metal_nut']
+
 
 def OBJECTS_SET_TWO() -> list:
     return [
@@ -115,5 +124,7 @@ def OBJECTS_SET_TWO() -> list:
         'transistor',
         'zipper']
 
+
 def NON_FIXED_OBJECTS() -> list:
     return ['hazelnut', 'screw', 'metal_nut']
+

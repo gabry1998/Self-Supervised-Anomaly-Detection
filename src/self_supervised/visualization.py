@@ -48,6 +48,7 @@ def plot_history(network_history, saving_path=None, mode='training'):
     plt.show()
     plt.close()
 
+
 def plot_multiple_curve(roc_curves:list, names:list, saving_path:str=None, title:str='', name:str='multi_curve.png'):
     if saving_path and not os.path.exists(saving_path):
         os.makedirs(saving_path)
@@ -145,28 +146,7 @@ def plot_tsne(embeddings:Tensor, labels:Tensor, saving_path:str=None, title:str=
     plt.close()
 
 
-def plot_heatmap(image, heatmap, saving_path:str=None, name:str='gradcam.png'):
-    if saving_path and not os.path.exists(saving_path):
-        os.makedirs(saving_path)
-    
-    fig, axs = plt.subplots(1,2, figsize=(16,16))
-    
-    axs[0].axis('off')
-    axs[0].set_title('original')
-    axs[0].imshow(image)
-    
-    axs[1].axis('off')
-    axs[1].set_title('localization')
-    axs[1].imshow(heatmap)
-    
-    if saving_path:
-        plt.savefig(saving_path+name, bbox_inches='tight')
-    else:
-        plt.savefig(name, bbox_inches='tight')
-    plt.close()
-
-
-def apply_segmentation(image:np.ndarray, predicted_mask:np.ndarray):
+def apply_segmentation(image:np.ndarray, predicted_mask:np.ndarray) -> np.ndarray:
     edged_image = feature.canny(predicted_mask)
     color_fill = np.array([200, 62, 115], dtype='uint8')
     color_border = np.array([51, 16, 103], dtype='uint8')
@@ -174,10 +154,10 @@ def apply_segmentation(image:np.ndarray, predicted_mask:np.ndarray):
     out = cv2.addWeighted(image, 0.7, masked_img, 0.3,0)
     masked_img = np.where(edged_image[...,None], color_border, out)
     out = cv2.addWeighted(out, 0.01, masked_img, 0.99,0)
-    return out
+    return out # return array shape is HxWxC
 
 
-def plot_single_image(img, saving_path, name):
+def plot_single_image(img:np.ndarray, saving_path:str, name:str):
     plt.set_cmap('magma')
     if saving_path and not os.path.exists(saving_path):
         os.makedirs(saving_path)
@@ -188,50 +168,7 @@ def plot_single_image(img, saving_path, name):
     else:
         plt.savefig(name, bbox_inches='tight')
     plt.close()
-
-def plot_original_and_saliency(image, saliency, saving_path, name):
-    if saving_path and not os.path.exists(saving_path):
-        os.makedirs(saving_path)
-    fig, axs = plt.subplots(1,2, figsize=(16,16))
-    axs[0].axis('off')
-    axs[0].set_title('original')
-    axs[0].imshow(image)
     
-    axs[1].axis('off')
-    axs[1].set_title('anomaly map')
-    axs[1].imshow(saliency)
-    if saving_path:
-        plt.savefig(saving_path+name, bbox_inches='tight')
-    else:
-        plt.savefig(name, bbox_inches='tight')
-    plt.close()
-
-def plot_original_saliency_segmentation(
-        image, 
-        saliency, 
-        segmentation,
-        saving_path:str=None, 
-        name:str='segmentation.png'):
-    if saving_path and not os.path.exists(saving_path):
-        os.makedirs(saving_path)
-    fig, axs = plt.subplots(1,3, figsize=(16,16))
-    
-    axs[0].axis('off')
-    axs[0].set_title('original')
-    axs[0].imshow(image, vmin=0, vmax=1)
-    
-    axs[1].axis('off')
-    axs[1].set_title('anomaly map')
-    axs[1].imshow(saliency, vmin=0, vmax=1)
-    
-    axs[2].axis('off')
-    axs[2].set_title('segmentation')
-    axs[2].imshow(segmentation, vmin=0, vmax=1)
-    if saving_path:
-        plt.savefig(saving_path+name, bbox_inches='tight')
-    else:
-        plt.savefig(name, bbox_inches='tight')
-    plt.close()
     
 def plot_heatmap_and_masks(
         image, 
@@ -271,7 +208,7 @@ def plot_heatmap_and_masks(
     plt.close()
 
 
-def apply_heatmap(image:Tensor, heatmap:Tensor):
+def apply_heatmap(image:Tensor, heatmap:Tensor) -> np.ndarray:
     #image is (1, 3, H, W)
     #heatmap is (1, 1, H, W)
     heatmap = cv2.applyColorMap(np.uint8(255 * heatmap.squeeze()), cv2.COLORMAP_MAGMA)
@@ -280,4 +217,4 @@ def apply_heatmap(image:Tensor, heatmap:Tensor):
     heatmap = torch.cat([r, g, b])
     result = heatmap+image
     result = result.div(result.max()).squeeze()
-    return imagetensor2array(result)
+    return imagetensor2array(result) # return array shape is HxWxC
